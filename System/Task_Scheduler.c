@@ -27,10 +27,12 @@ extern uint32_t g_tick_counter;
  */
 static void _Task_ReadLocalSensors(void)
 {
-    uint8_t temp_int, humi_int;
-    DHT11_Read_Data(&temp_int, &humi_int);
-    g_system_data.host.env_data.temperature = (float)temp_int;
-    g_system_data.host.env_data.humidity    = (float)humi_int;
+	 uint8_t temp_i, temp_d, humi_i, humi_d; 
+	 if (DHT11_Read_Data(&temp_i, &temp_d, &humi_i, &humi_d) == 0) 
+    {
+      g_system_data.host.env_data.humidity    = (float)humi_i + ((float)humi_d / 10.0f);
+      g_system_data.host.env_data.temperature = (float)temp_i + ((float)temp_d / 10.0f);
+    }
     g_system_data.host.env_data.smog_ppm    = (float)MQ2_GetData_PPM();
     g_system_data.host.env_data.gas_ppm      = (float)MQ5_GetData_PPM();
     // 可以在这里添加读取甲醛传感器的代码
@@ -42,28 +44,28 @@ static void _Task_ReadLocalSensors(void)
 static void _Task_UpdateHMI(void)
 {
     // 更新主机数据显示
-    HMI_SetNumber("p0_home.n4", "val", (int)g_system_data.host.env_data.temperature);
+    HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);		//
+    HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
     HMI_SetNumber("p0_home.n1", "val", (int)g_system_data.host.env_data.humidity);
     HMI_SetNumber("p0_home.n2", "val", (int)g_system_data.host.env_data.smog_ppm);
-//    HMI_SetNumber("p0_home.n3", "val", (int)g_system_data.host.env_data.co_ppm);
-//    // 更新从机1数据显示
-//    HMI_SetNumber("p1_env.n4", "val", (int)g_system_data.slaves[0].env_data.temperature);
-//    HMI_SetNumber("p1_env.n5", "val", (int)g_system_data.slaves[0].env_data.humidity);
-//    HMI_SetNumber("p1_env.n6", "val", (int)g_system_data.slaves[0].env_data.smog_ppm);
-//    HMI_SetNumber("p1_env.n7", "val", (int)g_system_data.slaves[0].env_data.co_ppm);
-//    HMI_SetNumber("p1_env.n8", "val", (int)g_system_data.slaves[0].env_data.aqi_ppm);
-//    // 更新从机2数据显示
-//    HMI_SetNumber("p1_env.n9", "val",  (int)g_system_data.slaves[1].env_data.temperature);
-//    HMI_SetNumber("p1_env.n10", "val", (int)g_system_data.slaves[1].env_data.humidity);
-//    HMI_SetNumber("p1_env.n11", "val", (int)g_system_data.slaves[1].env_data.smog_ppm);
-//    HMI_SetNumber("p1_env.n12", "val", (int)g_system_data.slaves[1].env_data.co_ppm);
-//    HMI_SetNumber("p1_env.n13", "val", (int)g_system_data.slaves[1].env_data.aqi_ppm);
-//    // 更新从机3数据显示
-//    HMI_SetNumber("p1_env.n14", "val", (int)g_system_data.slaves[2].env_data.temperature);
-//    HMI_SetNumber("p1_env.n15", "val", (int)g_system_data.slaves[2].env_data.humidity);
-//    HMI_SetNumber("p1_env.n16", "val", (int)g_system_data.slaves[2].env_data.smog_ppm);
-//    HMI_SetNumber("p1_env.n17", "val", (int)g_system_data.slaves[2].env_data.co_ppm);
-//    HMI_SetNumber("p1_env.n18", "val", (int)g_system_data.slaves[2].env_data.aqi_ppm);
+    // 更新从机1数据显示
+    HMI_SetNumber("p1_env.n4", "val", (int)g_system_data.slaves[0].env_data.temperature);
+    HMI_SetNumber("p1_env.n5", "val", (int)g_system_data.slaves[0].env_data.humidity);
+    HMI_SetNumber("p1_env.n6", "val", (int)g_system_data.slaves[0].env_data.smog_ppm);
+    HMI_SetNumber("p1_env.n7", "val", (int)g_system_data.slaves[0].env_data.co_ppm);
+    HMI_SetNumber("p1_env.n8", "val", (int)g_system_data.slaves[0].env_data.aqi_ppm);
+    // 更新从机2数据显示
+    HMI_SetNumber("p1_env.n9", "val",  (int)g_system_data.slaves[1].env_data.temperature);
+    HMI_SetNumber("p1_env.n10", "val", (int)g_system_data.slaves[1].env_data.humidity);
+    HMI_SetNumber("p1_env.n11", "val", (int)g_system_data.slaves[1].env_data.smog_ppm);
+    HMI_SetNumber("p1_env.n12", "val", (int)g_system_data.slaves[1].env_data.co_ppm);
+    HMI_SetNumber("p1_env.n13", "val", (int)g_system_data.slaves[1].env_data.aqi_ppm);
+    // 更新从机3数据显示
+    HMI_SetNumber("p1_env.n14", "val", (int)g_system_data.slaves[2].env_data.temperature);
+    HMI_SetNumber("p1_env.n15", "val", (int)g_system_data.slaves[2].env_data.humidity);
+    HMI_SetNumber("p1_env.n16", "val", (int)g_system_data.slaves[2].env_data.smog_ppm);
+    HMI_SetNumber("p1_env.n17", "val", (int)g_system_data.slaves[2].env_data.co_ppm);
+    HMI_SetNumber("p1_env.n18", "val", (int)g_system_data.slaves[2].env_data.aqi_ppm);
 
 }
 
