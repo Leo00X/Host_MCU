@@ -1,142 +1,153 @@
 #include "dht11.h"
-#include "delay.h"
-#include "ht32.h"
-#include "math.h"
-#include "usart.h"
 
-//IO方向设置
-#define DHT11_IO_IN()  {GPIO_DirectionConfig(HT_GPIOC, GPIO_PIN_0, GPIO_DIR_IN);GPIO_InputConfig(HT_GPIOC, GPIO_PIN_0,ENABLE);}
-#define DHT11_IO_OUT() {GPIO_DirectionConfig(HT_GPIOC, GPIO_PIN_0, GPIO_DIR_OUT);GPIO_InputConfig(HT_GPIOC, GPIO_PIN_0,DISABLE);}
+uint8_t T_H,T_L,H_H,H_L;  //分别为温度和湿度的高8位 低八位 
+uint8_t temp_H,temp_L,humi_H,humi_L,checkdata;
 
-#define	DHT11_DQ_IN   GPIO_ReadInBit(HT_GPIOC,GPIO_PIN_0)
-      
-
-void DHT11_DQ_OUT(u8 x)
+//设置通信引脚为输出
+static void dou_dht11_pinset_out(void)
 {
-	if(x)GPIO_SetOutBits(HT_GPIOC,GPIO_PIN_0);
-	else GPIO_ClearOutBits(HT_GPIOC,GPIO_PIN_0);
+		GPIO_DirectionConfig(dou_dht11_HT_GPIOx, dou_dht11_GPIO_PIN, GPIO_DIR_OUT);          //设置方向为输出
+		GPIO_OpenDrainConfig(dou_dht11_HT_GPIOx, dou_dht11_GPIO_PIN, DISABLE); 							//输出模式设置为推挽输出
+		//GPIO_DriveConfig(dou_dht11_HT_GPIOx,dou_dht11_GPIO_PIN,GPIO_DIR_OUT,GPIO_DV_16MA); //设置输出驱动电流能力
 }
 
-//复位DHT11
-void DHT11_Rst(void)	   
-{                 
-	DHT11_IO_OUT(); 	//SET OUTPUT
-    DHT11_DQ_OUT(0); 	//拉低DQ
-    delay_ms(20);    	//拉低至少18ms
-    DHT11_DQ_OUT(1); 	//DQ=1 
-	delay_us(30);     	//主机拉高20~40us
-}
-//等待DHT11的回应
-//返回1:未检测到DHT11的存在
-//返回0:存在
-u8 DHT11_Check(void) 	   
-{   
-	UsartPrintf(USART_DEBUG, "DHT11_Check(void)\r\n");
-	u8 retry=0;
-	DHT11_IO_IN();//SET INPUT	 
-    while (DHT11_DQ_IN&&retry<100)//DHT11会拉低40~80us
-	{
-		retry++;
-		delay_us(1);
-	};	 
-	if(retry>=100)return 1;
-	else retry=0;
-    while (!DHT11_DQ_IN&&retry<100)//DHT11拉低后会再次拉高40~80us
-	{
-		retry++;
-		delay_us(1);
-	};
-	if(retry>=100)return 1;	    
-	return 0;
-}
-//从DHT11读取一个位
-//返回值：1/0
-u8 DHT11_Read_Bit(void) 			 
+//设置通信引脚为输入
+static void dou_dht11_pinset_in(void)
 {
- 	u8 retry=0;
-	while(DHT11_DQ_IN&&retry<100)//等待变为低电平
-	{
-		retry++;
-		delay_us(1);
-	}
-	retry=0;
-	while(!DHT11_DQ_IN&&retry<100)//等待变高电平
-	{
-		retry++;
-		delay_us(1);
-	}
-	delay_us(40);//等待40us
-	if(DHT11_DQ_IN)return 1;
-	else return 0;		   
+		GPIO_DirectionConfig(dou_dht11_HT_GPIOx, dou_dht11_GPIO_PIN, GPIO_DIR_IN);        //设置方向为输入
+		//GPIO_PullResistorConfig(dou_dht11_HT_GPIOx, dou_dht11_GPIO_PIN, GPIO_PR_DISABLE); //除能上下拉电阻
+		GPIO_PullResistorConfig(dou_dht11_HT_GPIOx, dou_dht11_GPIO_PIN, GPIO_PR_UP);
+		GPIO_InputConfig(dou_dht11_HT_GPIOx,dou_dht11_GPIO_PIN,ENABLE);
 }
-//从DHT11读取一个字节
-//返回值：读到的数据
-u8 DHT11_Read_Byte(void)    
-{        
-    u8 i,dat;
-    dat=0;
-	for (i=0;i<8;i++) 
-	{
-   		dat<<=1; 
-	    dat|=DHT11_Read_Bit();
-    }						    
-    return dat;
+
+//初始化函数
+void dou_dht11_init(void)
+{
+    CKCU_PeripClockConfig_TypeDef CKCUClock = {{0}};
+    if (dou_dht11_GPIOx == GPIO_PA)
+    {
+        CKCUClock.Bit.PA = 1;
+    }
+    else if (dou_dht11_GPIOx == GPIO_PB)
+    {
+        CKCUClock.Bit.PB = 1;
+    }
+    else if (dou_dht11_GPIOx == GPIO_PC)
+    {
+        CKCUClock.Bit.PC = 1;
+    }
+    else if (dou_dht11_GPIOx == GPIO_PD)
+    {
+        CKCUClock.Bit.PD = 1;
+    }
+    CKCUClock.Bit.AFIO = 1;
+    CKCU_PeripClockConfig(CKCUClock, ENABLE);
+    AFIO_GPxConfig(dou_dht11_GPIOx, dou_dht11_GPIO_PIN, AFIO_MODE_1); //配置引脚工作模式
+    dou_dht11_pinset_out();
+    GPIO_WriteOutBits(dou_dht11_HT_GPIOx, dou_dht11_GPIO_PIN, SET);
 }
-//从DHT11读取一次数据
-//temp:温度值(范围:0~50°)
-//humi:湿度值(范围:20%~90%)
-//返回值：0,正常;1,读取失败
-u8 DHT11_Read_Data(u8 *temp,u8 *humi)    
-{        
-	UsartPrintf(USART_DEBUG, "DHT11_Read_Data\r\n");
- 	u8 buf[5];
-	u8 i;
-	DHT11_Rst();
-	if(DHT11_Check()==0)
-	{
-		for(i=0;i<5;i++)//读取40位数据
-		{
-			buf[i]=DHT11_Read_Byte();
-		}
-		if((buf[0]+buf[1]+buf[2]+buf[3])==buf[4])
-		{
-			*humi=buf[0];
-			*temp=buf[2];
-		}
-	}else return 1;
-	return 0;	    
+
+//获取引脚状态
+bool dou_dht11_get_databit(void)
+{
+    if (GPIO_ReadInBit(dou_dht11_HT_GPIOx, dou_dht11_GPIO_PIN) != RESET)
+    {
+        return TRUE;
+    }
+    else
+    {
+        return FALSE;
+    }
 }
-//初始化DHT11的IO口 DQ 同时检测DHT11的存在
-//返回1:不存在
-//返回0:存在    	 
-u8 DHT11_Init(void)
-{	 
-	//使能PC端口的时钟
-	CKCU_PeripClockConfig_TypeDef CKCUClock = {{0}};
-	CKCUClock.Bit.PC         = 1;
-//	CKCUClock.Bit.PB         = 1;
-	CKCUClock.Bit.AFIO       = 1;
-	CKCU_PeripClockConfig(CKCUClock, ENABLE);
 
-	
-//	GPIO_DirectionConfig(HT_GPIOB, GPIO_PIN_15, GPIO_DIR_OUT);
-//	GPIO_ClearOutBits(HT_GPIOB, GPIO_PIN_15);
-	//配置端口功能为GPIO
-	AFIO_GPxConfig(GPIO_PC, GPIO_PIN_0, AFIO_FUN_GPIO);
-
-	//配置IO口为输入模式                                                     
-	GPIO_DirectionConfig(HT_GPIOC, GPIO_PIN_0, GPIO_DIR_IN);
-
-	//使能输入
-	GPIO_InputConfig(HT_GPIOC, GPIO_PIN_0,ENABLE);
-			    
-	DHT11_Rst();  //复位DHT11
-	return DHT11_Check();//等待DHT11的回应
-} 
+//设置引脚输出
+void dou_dht11_set_databit(bool level)
+{
+		if (level != FALSE)
+    {
+        GPIO_WriteOutBits(dou_dht11_HT_GPIOx, dou_dht11_GPIO_PIN, SET);
+    }
+    else
+    {
+        GPIO_WriteOutBits(dou_dht11_HT_GPIOx, dou_dht11_GPIO_PIN, RESET);
+    }
+}
 
 
+//读取一字节数据
+static uint8_t dou_dht11_read_byte(void)
+{
+    uint8_t i;
+    uint8_t data = 0;
+    for (i = 0; i < 8; i++)
+    {
+        data <<= 1;
+        while ((!dou_dht11_get_databit()));
+        delay_us(30);
+        if (dou_dht11_get_databit())
+        {
+            data |= 0x1;
+            while(dou_dht11_get_databit());
+        }
+        else
+        {
+            
+        }
+    }
+    return data;
+}
 
+static bool dou_dht11_start_sampling(void)
+{
+    dou_dht11_pinset_out();
+    //主机拉低18ms? ?
+    dou_dht11_set_databit(FALSE);
+    delay_ms(18);
+    dou_dht11_set_databit(TRUE);
+    //总线由上拉电阻拉高 主机延时10us
+    delay_us(20);
+    //主机设为输入 判断从机响应信号 
+    dou_dht11_pinset_in();
+    //判断从机是否有低电平响应信号 如不响应则跳出，响应则向下运行?? ? ?
+    if (dou_dht11_get_databit() == FALSE)		//T !?? ? ?
+    {
+        //判断从机是否发出 80us 的低电平响应信号是否结束?? ? 
+        while (dou_dht11_get_databit() == FALSE);
 
+        //判断从机是否发出 80us 的高电平，如发出则进入数据接收状态
+        while (dou_dht11_get_databit() != FALSE);
+        return TRUE;
+    }
+    return FALSE;
+}
 
-
+void dou_dht11_get_data(void)
+{
+		uint8_t temp;
+   // ADC_IntConfig(HT_ADC, ADC_INT_SINGLE_EOC, DISABLE);
+    
+    if (dou_dht11_start_sampling())
+    {
+        //printf("DHT11 is ready to transmit data\r\n");
+        //数据接收状态 
+        humi_H = dou_dht11_read_byte();	 	//接收湿度高八位
+        humi_L = dou_dht11_read_byte(); 	//接收湿度低八位
+        temp_H = dou_dht11_read_byte();//接收温度高八位
+        temp_L = dou_dht11_read_byte();//接收温度低八位
+        checkdata = dou_dht11_read_byte();					//接收效验位
+        /* Data transmission finishes, pull the bus high */
+        dou_dht11_pinset_out();
+        dou_dht11_set_databit(TRUE);
+        //数据校验 
+        temp = (temp_H + temp_L + humi_H + humi_L);
+        if (temp == checkdata)
+        {
+            H_H = humi_H; 				// 湿度整数部分
+            H_L = humi_L;					//湿度小数部分
+            T_H = temp_H;					//温度整数部分
+            T_L = temp_L;					//温度小数部分
+        }
+				       
+    } 
+}
 
