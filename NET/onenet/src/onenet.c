@@ -686,7 +686,6 @@ void OneNET_Subscribe(void)
 
 
 
-
 //==========================================================
 //	函数名称：	OneNet_RevPro
 //
@@ -696,7 +695,7 @@ void OneNET_Subscribe(void)
 //
 //	返回参数：	无
 //
-//	说明：		
+//	说明：		(V3 - 修正了cJSON_IsNumber的兼容性问题)
 //==========================================================
 void OneNet_RevPro(unsigned char *cmd)
 {
@@ -719,9 +718,11 @@ void OneNet_RevPro(unsigned char *cmd)
 	int num = 0;
 	
 	cJSON *raw_json, *params_json;
-    cJSON *s1cup_json, *s1sup_json, *s1tlo_json, *s1tup_json, *s1hlo_json, *s1hup_json;
-    cJSON *s2cup_json, *s2sup_json, *s2tlo_json, *s2tup_json, *s2hlo_json, *s2hup_json;
-    cJSON *s3cup_json, *s3sup_json, *s3tlo_json, *s3tup_json, *s3hlo_json, *s3hup_json;
+    
+    // --- (V3-Add) 添加用于解析模式和风速的变量 ---
+    cJSON *mode_json, *fan_speed_json;
+    int i;
+    char fan_speed_key[32]; // 用于动态生成JSON键
 	
 	
 	type = MQTT_UnPacketRecv(cmd);
@@ -738,145 +739,54 @@ void OneNet_RevPro(unsigned char *cmd)
 //																	cmdid_topic, topic_len, req_payload, req_len);
 				
 				raw_json = cJSON_Parse(req_payload);
+                if (raw_json == NULL)
+                {
+                    UsartPrintf(USART_DEBUG, "Error: cJSON_Parse failed.\r\n");
+                    break; 
+                }
+
 				params_json = cJSON_GetObjectItem(raw_json,"params");
+                if (params_json == NULL)
+                {
+                    UsartPrintf(USART_DEBUG, "Error: 'params' object not found.\r\n");
+                    cJSON_Delete(raw_json);
+                    break;
+                }
 				
-			// --- 解析从机1的阈值 (Parse Slave 1 Thresholds) ---
+			// --- (V3-Add) 解析全局风机模式 (Parse Global Fan Mode) ---
+            mode_json = cJSON_GetObjectItem(params_json, "global_fan_mode");
+            
+            // (V3-Mod) 移除了 cJSON_IsNumber 检查
+            if (mode_json != NULL) 
+            {
+                // 假设g_system_data是全局变量, 且模式是整型(int)
+                // 对应发送代码中的: json_int_template, "global_fan_mode"
+                g_system_data.hmi_mode_request.mode_request = mode_json->valueint;
+                UsartPrintf(USART_DEBUG, "global_fan_mode = %d\r\n", g_system_data.hmi_mode_request.mode_request);
+            }
 
-			// slave1_co_upper_threshold
-			s1cup_json = cJSON_GetObjectItem(params_json, "slave1_co_upper_threshold");
-			if (s1cup_json != NULL) {
-			  // For robustness, consider adding cJSON_IsNumber(s1cup_json) check here
-			  slave1_co_upper_threshold = s1cup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave1_co_upper_threshold = %d\r\n", slave1_co_upper_threshold);
-			}
-
-			// slave1_smog_upper_threshold
-			s1sup_json = cJSON_GetObjectItem(params_json, "slave1_smog_upper_threshold");
-			if (s1sup_json != NULL) {
-			  slave1_smog_upper_threshold = s1sup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave1_smog_upper_threshold = %d\r\n", slave1_smog_upper_threshold);
-			}
-
-			// slave1_temp_lower_threshold
-			s1tlo_json = cJSON_GetObjectItem(params_json, "slave1_temp_lower_threshold");
-			if (s1tlo_json != NULL) {
-			  slave1_temp_lower_threshold = s1tlo_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave1_temp_lower_threshold = %d\r\n", slave1_temp_lower_threshold);
-			}
-
-			// slave1_temp_upper_threshold
-			s1tup_json = cJSON_GetObjectItem(params_json, "slave1_temp_upper_threshold");
-			if (s1tup_json != NULL) {
-			  slave1_temp_upper_threshold = s1tup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave1_temp_upper_threshold = %d\r\n", slave1_temp_upper_threshold);
-			}
-
-			// slave1_humi_lower_threshold
-			s1hlo_json = cJSON_GetObjectItem(params_json, "slave1_humi_lower_threshold");
-			if (s1hlo_json != NULL) {
-			  slave1_humi_lower_threshold = s1hlo_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave1_humi_lower_threshold = %d\r\n", slave1_humi_lower_threshold);
-			}
-
-			// slave1_humi_upper_threshold
-			s1hup_json = cJSON_GetObjectItem(params_json, "slave1_humi_upper_threshold");
-			if (s1hup_json != NULL) {
-			  slave1_humi_upper_threshold = s1hup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave1_humi_upper_threshold = %d\r\n", slave1_humi_upper_threshold);
-			}
-
-			// --- 解析从机2的阈值 (Parse Slave 2 Thresholds) ---
-
-			// slave2_co_upper_threshold
-			s2cup_json = cJSON_GetObjectItem(params_json, "slave2_co_upper_threshold");
-			if (s2cup_json != NULL) {
-			  slave2_co_upper_threshold = s2cup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave2_co_upper_threshold = %d\r\n", slave2_co_upper_threshold);
-			}
-
-			// slave2_smog_upper_threshold
-			s2sup_json = cJSON_GetObjectItem(params_json, "slave2_smog_upper_threshold");
-			if (s2sup_json != NULL) {
-			  slave2_smog_upper_threshold = s2sup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave2_smog_upper_threshold = %d\r\n", slave2_smog_upper_threshold);
-			}
-
-			// slave2_temp_lower_threshold
-			s2tlo_json = cJSON_GetObjectItem(params_json, "slave2_temp_lower_threshold");
-			if (s2tlo_json != NULL) {
-			  slave2_temp_lower_threshold = s2tlo_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave2_temp_lower_threshold = %d\r\n", slave2_temp_lower_threshold);
-			}
-
-			// slave2_temp_upper_threshold
-			s2tup_json = cJSON_GetObjectItem(params_json, "slave2_temp_upper_threshold");
-			if (s2tup_json != NULL) {
-			  slave2_temp_upper_threshold = s2tup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave2_temp_upper_threshold = %d\r\n", slave2_temp_upper_threshold);
-			}
-
-			// slave2_humi_lower_threshold
-			s2hlo_json = cJSON_GetObjectItem(params_json, "slave2_humi_lower_threshold");
-			if (s2hlo_json != NULL) {
-			  slave2_humi_lower_threshold = s2hlo_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave2_humi_lower_threshold = %d\r\n", slave2_humi_lower_threshold);
-			}
-
-			// slave2_humi_upper_threshold
-			s2hup_json = cJSON_GetObjectItem(params_json, "slave2_humi_upper_threshold");
-			if (s2hup_json != NULL) {
-			  slave2_humi_upper_threshold = s2hup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave2_humi_upper_threshold = %d\r\n", slave2_humi_upper_threshold);
-			}
-
-			// --- 解析从机3的阈值 (Parse Slave 3 Thresholds) ---
-
-			// slave3_co_upper_threshold
-			s3cup_json = cJSON_GetObjectItem(params_json, "slave3_co_upper_threshold");
-			if (s3cup_json != NULL) {
-			  slave3_co_upper_threshold = s3cup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave3_co_upper_threshold = %d\r\n", slave3_co_upper_threshold);
-			}
-
-			// slave3_smog_upper_threshold
-			s3sup_json = cJSON_GetObjectItem(params_json, "slave3_smog_upper_threshold");
-			if (s3sup_json != NULL) {
-			  slave3_smog_upper_threshold = s3sup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave3_smog_upper_threshold = %d\r\n", slave3_smog_upper_threshold);
-			}
-
-			// slave3_temp_lower_threshold
-			s3tlo_json = cJSON_GetObjectItem(params_json, "slave3_temp_lower_threshold");
-			if (s3tlo_json != NULL) {
-			  slave3_temp_lower_threshold = s3tlo_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave3_temp_lower_threshold = %d\r\n", slave3_temp_lower_threshold);
-			}
-
-			// slave3_temp_upper_threshold
-			s3tup_json = cJSON_GetObjectItem(params_json, "slave3_temp_upper_threshold");
-			if (s3tup_json != NULL) {
-			  slave3_temp_upper_threshold = s3tup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave3_temp_upper_threshold = %d\r\n", slave3_temp_upper_threshold);
-			}
-
-			// slave3_humi_lower_threshold
-			s3hlo_json = cJSON_GetObjectItem(params_json, "slave3_humi_lower_threshold");
-			if (s3hlo_json != NULL) {
-			  slave3_humi_lower_threshold = s3hlo_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave3_humi_lower_threshold = %d\r\n", slave3_humi_lower_threshold);
-			}
-
-			// slave3_humi_upper_threshold
-			s3hup_json = cJSON_GetObjectItem(params_json, "slave3_humi_upper_threshold");
-			if (s3hup_json != NULL) {
-			  slave3_humi_upper_threshold = s3hup_json->valuedouble;
-			  UsartPrintf(USART_DEBUG, "slave3_humi_upper_threshold = %d\r\n", slave3_humi_upper_threshold);
-			}
+            // --- (V3-Add) 循环解析各从机的风速 (Parse Slave Fan Speeds) ---
+            for (i = 0; i < MAX_SLAVES; i++)
+            {
+                // 动态生成键名, e.g., "slave1_fan_speed", "slave2_fan_speed", ...
+                sprintf(fan_speed_key, "slave%d_fan_speed", i + 1);
+                
+                fan_speed_json = cJSON_GetObjectItem(params_json, fan_speed_key);
+                
+                // (V3-Mod) 移除了 cJSON_IsNumber 检查
+                if (fan_speed_json != NULL)
+                {
+                    // 假设g_system_data是全局变量, 且风速是整型(int)
+                    // 对应发送代码中的: json_int_template, "slave%d_fan_speed"
+                    g_system_data.slaves[i].control.target_fan_speed = fan_speed_json->valueint;
+                    UsartPrintf(USART_DEBUG, "%s = %d\r\n", fan_speed_key, g_system_data.slaves[i].control.target_fan_speed);
+                }
+            }
 			
 			
 			
-							cJSON_Delete(raw_json);
-				UsartPrintf(USART_DEBUG, "cJSON_Delete(raw_json)  OK");
+				cJSON_Delete(raw_json);
+				UsartPrintf(USART_DEBUG, "cJSON_Delete(raw_json)  OK");
 			}
 			
 		case MQTT_PKT_PUBACK:														//发送Publish消息，平台回复的Ack

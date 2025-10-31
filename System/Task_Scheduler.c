@@ -271,10 +271,10 @@ void Scheduler_Tick(void)
 		g_task_flags.run_task_process_hmi_down = true;//接收显示屏控制 
 		if (g_tick_counter % 500 == 0){g_task_flags.run_task_led_toggle = true;} // LED闪烁每500ms
 		if (g_tick_counter % 5000 == 100){g_task_flags.run_task_intelligent_control = true;}//智能管理
-		if (g_tick_counter % 2000 == 0){g_task_flags.run_task_read_local_sensors = true;}//主机数据采集(2秒) 
+		if (g_tick_counter % 5000 == 0){g_task_flags.run_task_read_local_sensors = true;}//主机数据采集(5秒) 
 		if (g_tick_counter % 500 == 10){g_task_flags.run_task_command_dispatch = true;}//发送管理指令 
 		if (g_tick_counter % 5000 == 0){g_task_flags.run_task_update_hmi = true;}//显示屏更新 
-		if (g_tick_counter % 10100 == 0){g_task_flags.run_task_cloud_upload = true;}//网络数据更新
+		if (g_tick_counter % 5100 == 0){g_task_flags.run_task_cloud_upload = true;}//网络数据更新
 }
 
 /**
