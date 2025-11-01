@@ -597,17 +597,17 @@ void OneNet_SendData(void)
             ESP8266_SendData(mqttPacket._data, mqttPacket._len);
             UsartPrintf(USART_DEBUG, "Send OK\r\n");
 
-			  // (安全修复 V2): 不再使用 UsartPrintf 的 %s 打印长字符串，避免其内部缓冲区溢出
-				UsartPrintf(USART_DEBUG, "\r\n--- OneNET JSON Payload ---\r\n");
+//			  // (安全修复 V2): 不再使用 UsartPrintf 的 %s 打印长字符串，避免其内部缓冲区溢出
+//				UsartPrintf(USART_DEBUG, "\r\n--- OneNET JSON Payload ---\r\n");
 
-				// 使用循环，手动将 buf 中的每个字符通过串口发送出去
-				for (i = 0; buf[i] != '\0'; i++)
-				{
-					 // !! 注意：请将下面的函数名替换为您项目中实际使用的“发送单个字节”的函数 !!
-					 Usart_Sendbyte(USART_DEBUG, buf[i]); 
-				}
+//				// 使用循环，手动将 buf 中的每个字符通过串口发送出去
+//				for (i = 0; buf[i] != '\0'; i++)
+//				{
+//					 // !! 注意：请将下面的函数名替换为您项目中实际使用的“发送单个字节”的函数 !!
+//					 Usart_Sendbyte(USART_DEBUG, buf[i]); 
+//				}
 
-				UsartPrintf(USART_DEBUG, "\r\n---------------------------------\r\n");
+//				UsartPrintf(USART_DEBUG, "\r\n---------------------------------\r\n");
             MQTT_DeleteBuffer(&mqttPacket);
         }
         else
@@ -684,8 +684,6 @@ void OneNET_Subscribe(void)
 
 
 
-
-
 //==========================================================
 //	函数名称：	OneNet_RevPro
 //
@@ -695,7 +693,7 @@ void OneNET_Subscribe(void)
 //
 //	返回参数：	无
 //
-//	说明：		(V3 - 修正了cJSON_IsNumber的兼容性问题)
+//	说明：		(V4 - 修复了PUBLISH case缺少break导致的HardFault)
 //==========================================================
 void OneNet_RevPro(unsigned char *cmd)
 {
@@ -742,6 +740,7 @@ void OneNet_RevPro(unsigned char *cmd)
                 if (raw_json == NULL)
                 {
                     UsartPrintf(USART_DEBUG, "Error: cJSON_Parse failed.\r\n");
+                    // (V4-Fix) 即使解析失败，也需要 break!
                     break; 
                 }
 
@@ -750,6 +749,7 @@ void OneNet_RevPro(unsigned char *cmd)
                 {
                     UsartPrintf(USART_DEBUG, "Error: 'params' object not found.\r\n");
                     cJSON_Delete(raw_json);
+                    // (V4-Fix) 即使解析失败，也需要 break!
                     break;
                 }
 				
@@ -759,8 +759,7 @@ void OneNet_RevPro(unsigned char *cmd)
             // (V3-Mod) 移除了 cJSON_IsNumber 检查
             if (mode_json != NULL) 
             {
-                // 假设g_system_data是全局变量, 且模式是整型(int)
-                // 对应发送代码中的: json_int_template, "global_fan_mode"
+                // 假设g_system_data在app_globals.h中定义并在此处可见
                 g_system_data.hmi_mode_request.mode_request = mode_json->valueint;
                 UsartPrintf(USART_DEBUG, "global_fan_mode = %d\r\n", g_system_data.hmi_mode_request.mode_request);
             }
@@ -776,18 +775,21 @@ void OneNet_RevPro(unsigned char *cmd)
                 // (V3-Mod) 移除了 cJSON_IsNumber 检查
                 if (fan_speed_json != NULL)
                 {
-                    // 假设g_system_data是全局变量, 且风速是整型(int)
-                    // 对应发送代码中的: json_int_template, "slave%d_fan_speed"
+                    // 假设g_system_data在app_globals.h中定义并在此处可见
                     g_system_data.slaves[i].control.target_fan_speed = fan_speed_json->valueint;
                     UsartPrintf(USART_DEBUG, "%s = %d\r\n", fan_speed_key, g_system_data.slaves[i].control.target_fan_speed);
                 }
             }
 			
-			
-			
 				cJSON_Delete(raw_json);
 				UsartPrintf(USART_DEBUG, "cJSON_Delete(raw_json)  OK");
 			}
+            
+            // ==========================================================
+            // (V4-FIX) 关键修复：
+            // 必须在此处添加 break，防止“case穿透”到 PUBACK
+            // ==========================================================
+            break; 
 			
 		case MQTT_PKT_PUBACK:														//发送Publish消息，平台回复的Ack
 		
