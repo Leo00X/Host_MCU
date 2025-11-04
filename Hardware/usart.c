@@ -176,6 +176,7 @@ void USART1_Init_RxBuffer(void)
 *******************************************************************************/
 void USART1_IRQHandler(void) 
 {
+	
     // 检查是否是接收中断
     if (USART_GetFlagStatus(COM1_PORT, USART_FLAG_RXDR)) 
     {

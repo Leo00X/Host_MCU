@@ -28,6 +28,7 @@
 #include "delay.h"
 #include "usart.h"
 
+#include "uart.h"//2025年11月3日 调试
 //C库
 #include <string.h>
 #include <stdio.h>
@@ -182,6 +183,7 @@ unsigned char *ESP8266_GetIPD(unsigned short timeOut)
 			if(ptrIPD == NULL)											//如果没找到，可能是IPD头的延迟，还是需要等待一会，但不会超过设定的时间
 			{
 //				UsartPrintf(USART_DEBUG, "\"IPD\" not found\r\n");
+				uprintf("\"IPD\" not found\r\n");
 			}
 			else
 			{
@@ -190,6 +192,7 @@ unsigned char *ESP8266_GetIPD(unsigned short timeOut)
 				{
 					ptrIPD++;
 //				UsartPrintf(USART_DEBUG, "\"IPD\" ok\r\n");
+				uprintf("\"IPD\" ok\r\n");
 					return (unsigned char *)(ptrIPD);
 				}
 				else

@@ -35,13 +35,13 @@
 
 //硬件驱动
 #include "usart.h"
+#include "uart.h"
 #include "delay.h"
 //#include "beep.h"
 //#include "fan.h"
 #include "beep.h"
 
 #include "app_globals.h"
-
 //C库
 #include <string.h>
 #include <stdio.h>
@@ -65,7 +65,7 @@ char key[48];
 
 extern unsigned char esp8266_buf[1024];
 extern uint32_t g_tick_counter;
-static char g_onenet_tx_buf[1600];
+//static char g_onenet_tx_buf[1600];
 /*
 ************************************************************
 *	函数名称：	OTA_UrlEncode
@@ -489,10 +489,15 @@ uint16_t OneNet_FillBuf(char *buf)
     written = snprintf(p, remaining, json_float_template, "host_formaldehyde_ppb", g_system_data.host.env_data.formaldehyde_ppb);
     if (written < 0 || written >= remaining) return 0;
     p += written; remaining -= written;
-
-    written = snprintf(p, remaining, json_int_template, "global_fan_mode", g_system_data.hmi_mode_request.mode_request);
-    if (written < 0 || written >= remaining) return 0;
-    p += written; remaining -= written;
+	 
+	 // 1. 检查模式切换请求
+    if (g_system_data.hmi_mode_request.new_request_flag == false)
+    {
+		 written = snprintf(p, remaining, json_int_template, "global_fan_mode", g_system_data.hmi_mode_request.mode_request);
+		 uprintf("global_fan_mode = %d\r\n", g_system_data.hmi_mode_request.mode_request);
+		 if (written < 0 || written >= remaining) return 0;
+		 p += written; remaining -= written;
+    }
 
     // 3. 循环添加所有在线从机的数据
     for (i = 0; i < MAX_SLAVES; i++)
@@ -682,144 +687,150 @@ void OneNET_Subscribe(void)
 
 }
 
-
-
 //==========================================================
 //	函数名称：	OneNet_RevPro
 //
-//	函数功能：	平台返回数据检测
+//	函数功能：	平台返回数据检测 (最终修复版)
 //
-//	入口参数：	dataPtr：平台返回的数据
+//	入口参数：	cmd：平台返回的数据
 //
 //	返回参数：	无
 //
-//	说明：		(V4 - 修复了PUBLISH case缺少break导致的HardFault)
+//	说明：		集成了对 /thing/property/set 指令的自动响应
 //==========================================================
 void OneNet_RevPro(unsigned char *cmd)
 {
-	
-	char *req_payload = NULL;
-	char *cmdid_topic = NULL;
-	
-	unsigned short topic_len = 0;
-	unsigned short req_len = 0;
-	
-	unsigned char qos = 0;
-	static unsigned short pkt_id = 0;
-	
-	unsigned char type = 0;
-	
-	short result = 0;
+    char *req_payload = NULL;
+    char *cmdid_topic = NULL;
 
-	char *dataPtr = NULL;
-	char numBuf[800];
-	int num = 0;
-	
-	cJSON *raw_json, *params_json;
-    
-    // --- (V3-Add) 添加用于解析模式和风速的变量 ---
+    unsigned short topic_len = 0;
+    unsigned short req_len = 0;
+
+    unsigned char qos = 0;
+    static unsigned short pkt_id = 0;
+
+    unsigned char type = 0;
+
+    short result = 0;
+
+    cJSON *raw_json, *params_json;
     cJSON *mode_json, *fan_speed_json;
     int i;
-    char fan_speed_key[32]; // 用于动态生成JSON键
-	
-	
-	type = MQTT_UnPacketRecv(cmd);
-	switch(type)
-	{
-		case MQTT_PKT_PUBLISH:																//接收的Publish消息
-		
-			result = MQTT_UnPacketPublish(cmd, &cmdid_topic, &topic_len, &req_payload, &req_len, &qos, &pkt_id);
-			if(result == 0)
-			{
-				char *data_ptr = NULL;
-				
-//				UsartPrintf(USART_DEBUG, "topic: %s, topic_len: %d, payload: %s, payload_len: %d\r\n",
-//																	cmdid_topic, topic_len, req_payload, req_len);
-				
-				raw_json = cJSON_Parse(req_payload);
-                if (raw_json == NULL)
-                {
-                    UsartPrintf(USART_DEBUG, "Error: cJSON_Parse failed.\r\n");
-                    // (V4-Fix) 即使解析失败，也需要 break!
-                    break; 
-                }
+    char fan_speed_key[32]; 
 
-				params_json = cJSON_GetObjectItem(raw_json,"params");
-                if (params_json == NULL)
-                {
-                    UsartPrintf(USART_DEBUG, "Error: 'params' object not found.\r\n");
-                    cJSON_Delete(raw_json);
-                    // (V4-Fix) 即使解析失败，也需要 break!
-                    break;
-                }
-				
-			// --- (V3-Add) 解析全局风机模式 (Parse Global Fan Mode) ---
-            mode_json = cJSON_GetObjectItem(params_json, "global_fan_mode");
-            
-            // (V3-Mod) 移除了 cJSON_IsNumber 检查
-            if (mode_json != NULL) 
-            {
-                // 假设g_system_data在app_globals.h中定义并在此处可见
-                g_system_data.hmi_mode_request.mode_request = mode_json->valueint;
-                UsartPrintf(USART_DEBUG, "global_fan_mode = %d\r\n", g_system_data.hmi_mode_request.mode_request);
-            }
+    type = MQTT_UnPacketRecv(cmd);
+    switch(type)
+    {
+        case MQTT_PKT_PUBLISH: //接收的Publish消息
 
-            // --- (V3-Add) 循环解析各从机的风速 (Parse Slave Fan Speeds) ---
-            for (i = 0; i < MAX_SLAVES; i++)
+            result = MQTT_UnPacketPublish(cmd, &cmdid_topic, &topic_len, &req_payload, &req_len, &qos, &pkt_id);
+            if(result == 0)
             {
-                // 动态生成键名, e.g., "slave1_fan_speed", "slave2_fan_speed", ...
-                sprintf(fan_speed_key, "slave%d_fan_speed", i + 1);
-                
-                fan_speed_json = cJSON_GetObjectItem(params_json, fan_speed_key);
-                
-                // (V3-Mod) 移除了 cJSON_IsNumber 检查
-                if (fan_speed_json != NULL)
+                uprintf("topic: %s, payload: %s\r\n", cmdid_topic, req_payload);
+
+                raw_json = cJSON_Parse(req_payload);
+                if (raw_json != NULL)
                 {
-                    // 假设g_system_data在app_globals.h中定义并在此处可见
-                    g_system_data.slaves[i].control.target_fan_speed = fan_speed_json->valueint;
-                    UsartPrintf(USART_DEBUG, "%s = %d\r\n", fan_speed_key, g_system_data.slaves[i].control.target_fan_speed);
+                    params_json = cJSON_GetObjectItem(raw_json,"params");
+                    if (params_json != NULL)
+                    {
+                        // --- 解析全局风机模式 (Parse Global Fan Mode) ---
+                        mode_json = cJSON_GetObjectItem(params_json, "global_fan_mode");
+                        if (mode_json != NULL)
+                        {
+                            g_system_data.hmi_mode_request.new_request_flag = true;
+                            g_system_data.hmi_mode_request.mode_request = mode_json->valueint;
+                            uprintf("global_fan_mode = %d\r\n", g_system_data.hmi_mode_request.mode_request);
+                        }
+
+                        // --- 循环解析各从机的风速 (Parse Slave Speeds) ---
+                        for (i = 0; i < MAX_SLAVES; i++)
+                        {
+                            sprintf(fan_speed_key, "slave%d_fan_speed", i + 1);
+                            fan_speed_json = cJSON_GetObjectItem(params_json, fan_speed_key);
+
+                            if (fan_speed_json != NULL)
+                            {
+                                g_system_data.slaves[i].control.target_fan_speed = fan_speed_json->valueint;
+                                uprintf("%s = %d\r\n", fan_speed_key, g_system_data.slaves[i].control.target_fan_speed);
+                            }
+                        }
+                    }
+
+                    // =======================================================
+                    // ===== 核心修复：添加指令回应逻辑 (set_reply) =====
+                    // =======================================================
+                    
+                    // 1. 提取 "id"
+                    cJSON *id_json = cJSON_GetObjectItem(raw_json, "id");
+                    
+                    // 2. 检查是否是 set 指令
+                    char *set_position = strstr(cmdid_topic, "/thing/property/set");
+                    
+                    if (id_json && id_json->type == cJSON_String && set_position)
+                    {
+                        // 确认 Topic 确实是以 "/thing/property/set" 结尾的
+                        if (strlen(cmdid_topic) == (set_position - cmdid_topic + strlen("/thing/property/set")))
+                        {
+                            char *id_str = id_json->valuestring;
+                            char reply_topic[200];    // 确保这个buffer足够大
+                            char reply_payload[100]; // 确保这个buffer足够大
+
+                            // 3. 构建回复 Topic
+                            strncpy(reply_topic, cmdid_topic, (set_position - cmdid_topic));
+                            reply_topic[set_position - cmdid_topic] = '\0'; // 添加字符串结束符
+                            strcat(reply_topic, "/thing/property/set_reply");
+                            
+                            // 4. 构建回复 Payload (使用提取到的 id_str)
+                            sprintf(reply_payload, "{\"id\":\"%s\", \"code\":200, \"msg\":\"success\"}", id_str);
+                            
+                            // 5. 发送回复 (!!! 调用 onenet.c 中已有的函数 !!!)
+                            OneNET_Publish(reply_topic, (const char*)reply_payload);
+                            
+                            // uprintf 已经在 OneNET_Publish 内部调用了, 这里可以省略
+                            // uprintf("REPLY: Topic: %s\r\n", reply_topic);
+                            // uprintf("REPLY: Payload: %s\r\n", reply_payload);
+                        }
+                    }
+                    // =======================================================
+                    // ===== “回应”逻辑 (END) =====
+                    // =======================================================
+
+                    cJSON_Delete(raw_json); // 释放JSON对象
                 }
             }
-			
-				cJSON_Delete(raw_json);
-				UsartPrintf(USART_DEBUG, "cJSON_Delete(raw_json)  OK");
-			}
-            
-            // ==========================================================
-            // (V4-FIX) 关键修复：
-            // 必须在此处添加 break，防止“case穿透”到 PUBACK
-            // ==========================================================
             break; 
-			
-		case MQTT_PKT_PUBACK:														//发送Publish消息，平台回复的Ack
-		
-			if(MQTT_UnPacketPublishAck(cmd) == 0)
-				UsartPrintf(USART_DEBUG, "Tips:	MQTT Publish Send OK\r\n");
-			
-		break;
-		
-		case MQTT_PKT_SUBACK:																//发送Subscribe消息的Ack
-		
-			if(MQTT_UnPacketSubscribe(cmd) == 0)
-				UsartPrintf(USART_DEBUG, "Tips:	MQTT Subscribe OK\r\n");
-			else
-				UsartPrintf(USART_DEBUG, "Tips:	MQTT Subscribe Err\r\n");
-		
-		break;
-		
-		default:
-			result = -1;
-		break;
-	}
-	
-	ESP8266_Clear();									//清空缓存
-	
-	if(result == -1)
-		return;
-	
-	if(type == MQTT_PKT_CMD || type == MQTT_PKT_PUBLISH)
-	{
-		MQTT_FreeBuffer(cmdid_topic);
-		MQTT_FreeBuffer(req_payload);
-	}
+
+        case MQTT_PKT_PUBACK: //发送Publish消息，平台回复的Ack
+
+            if(MQTT_UnPacketPublishAck(cmd) == 0)
+//                uprintf("Tips:	MQTT Publish Send OK\r\n");
+
+        break;
+
+        case MQTT_PKT_SUBACK: //发送Subscribe消息的Ack
+
+            if(MQTT_UnPacketSubscribe(cmd) == 0)
+                uprintf("Tips:	MQTT Subscribe OK\r\n");
+            else
+                uprintf("Tips:	MQTT Subscribe Err\r\n");
+
+        break;
+
+        default:
+            result = -1;
+        break;
+    }
+
+    ESP8266_Clear(); //清空缓存
+
+    if(result == -1)
+        return;
+
+    if(type == MQTT_PKT_CMD || type == MQTT_PKT_PUBLISH)
+    {
+        MQTT_FreeBuffer(cmdid_topic);
+        MQTT_FreeBuffer(req_payload);
+    }
 }
+

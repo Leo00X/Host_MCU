@@ -12,7 +12,8 @@
  * @brief 定义系统支持的最大从机数量.
  */
 #define MAX_SLAVES                                  (3)
-
+#define TEST_WIFI                            		 (0)
+#define ALL_SLAVE_ID   										0xAA      // 全部从机
 
 /*==================================================================================================
  * 新增: HMI 控制请求数据结构 (HMI Control Request Data Structures)

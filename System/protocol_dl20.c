@@ -60,7 +60,7 @@ static u8 CalculateChecksum(const u8* data, u8 len)
  *==================================================================================================*/
 void DL20_Init(void)
 {
-    uprintf("DL20 INFO: Protocol Layer Initialized.\r\n");
+//    uprintf("DL20 INFO: Protocol Layer Initialized.\r\n");
     ResetRxStateMachine();
     BSP_UART_Register_RX_Callback(DL20_ReceiveByte_Callback);
 }
@@ -113,11 +113,11 @@ static void DL20_ReceiveByte_Callback(u8 received_byte)
 
 static int DL20_ParseFrame(const u8* buffer, u16 len, SystemData_t* system_data)
 {
-    uprintf("DL20 DEBUG: Parsing frame: ");
-    for(int i = 0; i < len; i++) {
-        uprintf("%02X ", buffer[i]);
-    }
-    uprintf("\r\n");
+//    uprintf("DL20 DEBUG: Parsing frame: ");
+//    for(int i = 0; i < len; i++) {
+//        uprintf("%02X ", buffer[i]);
+//    }
+//    uprintf("\r\n");
 
     if (len < 7 || buffer[0] != DL20_FRAME_SOF || buffer[len - 1] != DL20_FRAME_EOF)
     {
@@ -202,7 +202,7 @@ static u16 PackCommand(u8 slave_id, u8 func, const void* payload, u8 payload_len
     buffer[4 + payload_len] = CalculateChecksum(&buffer[1], frame_len_field);
     buffer[5 + payload_len] = DL20_FRAME_EOF;
     
-    uprintf("DL20 DEBUG: Packing command for Slave %d, Func 0x%02X. Total len: %d\r\n", slave_id, func, total_len);
+//    uprintf("DL20 DEBUG: Packing command for Slave %d, Func 0x%02X. Total len: %d\r\n", slave_id, func, total_len);
     
     return total_len;
 }

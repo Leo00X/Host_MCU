@@ -46,6 +46,7 @@ static void _Task_UpdateHMI(void)
     // 更新主机数据显示
     HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);		//
     HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
+    HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
     HMI_SetNumber("p0_home.n1", "val", (int)g_system_data.host.env_data.humidity);
     HMI_SetNumber("p0_home.n2", "val", (int)g_system_data.host.env_data.smog_ppm);
     // 更新从机1数据显示
@@ -67,6 +68,31 @@ static void _Task_UpdateHMI(void)
     HMI_SetNumber("p1_env.n17", "val", (int)g_system_data.slaves[2].env_data.co_ppm);
     HMI_SetNumber("p1_env.n18", "val", (int)g_system_data.slaves[2].env_data.aqi_ppm);
 
+
+}
+
+/**
+ * @brief  [任务] 处理 HMI 请求和系统核心逻辑
+ * @note   此任务应在主循环中被 *高频* 调用。
+ */
+static void _Task_ProcessLogic(void)
+{
+    // 1. 检查模式切换请求
+    if (g_system_data.hmi_mode_request.new_request_flag == true)
+    {
+       uprintf("Processing Mode Change Request: %d\r\n", g_system_data.hmi_mode_request.mode_request);
+		 HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
+		 HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
+		 HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
+       g_system_data.hmi_mode_request.new_request_flag = false;
+    }
+	 if(!(0x01 == g_system_data.hmi_mode_request.mode_request))
+	 {
+		HMI_SetNumber("p2_ctrl.fan_speed_id_1", "val", (int)g_system_data.slaves[0].control.target_fan_speed);
+		HMI_SetNumber("p2_ctrl.fan_speed_id_2", "val", (int)g_system_data.slaves[1].control.target_fan_speed);
+		HMI_SetNumber("p2_ctrl.fan_speed_id_3", "val", (int)g_system_data.slaves[2].control.target_fan_speed);
+	 }
+
 }
 
 /**
@@ -86,9 +112,13 @@ static void _Task_HMI_Process(void)
                 // 目标必须是主机 (ID 0x00)
                 if (hmi_cmd.target_id == 0x00) {
                     // 更新 g_system_data 中的全局模式请求
-                    g_system_data.hmi_mode_request.mode_request = hmi_cmd.data;
+						  g_system_data.hmi_mode_request.mode_request ++;
+						  if(g_system_data.hmi_mode_request.mode_request > 2){g_system_data.hmi_mode_request.mode_request = 0 ;}
                     g_system_data.hmi_mode_request.new_request_flag = true; // 设置请求标志
-						  uprintf("HMI mode_request.\r\n");
+						  HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
+						  HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
+						  HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
+						 uprintf("mode: %2d\r\n",g_system_data.hmi_mode_request.mode_request);
                 }
                 break;
             case 0x02:		// 功能码 0x02: 风速控制
@@ -96,11 +126,22 @@ static void _Task_HMI_Process(void)
                 if (hmi_cmd.target_id >= 1 && hmi_cmd.target_id <= MAX_SLAVES) {
                     u8 slave_index = hmi_cmd.target_id - 1;
                     // 写入对指定从机的控制请求
-                    g_system_data.hmi_fan_requests[slave_index].fan_command = hmi_cmd.data;
+//                   g_system_data.hmi_fan_requests[slave_index].fan_command = hmi_cmd.data;
+						  g_system_data.slaves[slave_index].control.target_fan_speed = hmi_cmd.data;
                     g_system_data.hmi_fan_requests[slave_index].new_request_flag = true; // 设置请求标志
-						  uprintf("HMI fan_command%02X.\r\n",hmi_cmd.data);
-						 g_system_data.slaves[slave_index].control.target_fan_speed = hmi_cmd.data ;
+						 uprintf("ID: %u. Target Fan Speed: %3d.\r\n",hmi_cmd.target_id,g_system_data.slaves[slave_index].control.target_fan_speed);
                 }
+					 // 目标全部从机的控制请求
+					 else if(ALL_SLAVE_ID == hmi_cmd.target_id)
+					 {
+							for (int slave_i = 0; slave_i < MAX_SLAVES; slave_i++)
+							 {
+								  // 写入决策结果
+								  g_system_data.slaves[slave_i].control.target_fan_speed = hmi_cmd.data;
+								  g_system_data.hmi_fan_requests[slave_i].new_request_flag = true; // 设置请求标志
+						 		  uprintf("ID: %u. Target Fan Speed: %3d.\r\n",slave_i + 1,g_system_data.slaves[slave_i].control.target_fan_speed);
+							 }
+					 }
                 break;
             default:
                 // 收到未定义的功能码，可以选择忽略或记录日志
@@ -143,6 +184,7 @@ static void _Task_ProcessCloudDownlink(void)
     if(dataPtr != NULL)
     {
         OneNet_RevPro(dataPtr);
+//		  uprintf("dataPtr != NULL\r\n");
     }
 }
 
@@ -156,9 +198,11 @@ static void _Task_ProcessCloudDownlink(void)
 static void _Task_IntelligentControl(void)
 {
 //    uprintf("SCHEDULER: Calling IAQ Algorithm...\r\n");
-
-    // 只需调用算法模块的接口函数
-    IAQ_RunDecisionAlgorithm();
+	if(!(0x01 == g_system_data.hmi_mode_request.mode_request))
+	{
+		IAQ_RunDecisionAlgorithm();    // 只需调用算法模块的接口函数
+//		uprintf("IAQ Algorithm...\r\n");
+	}
 }
 
 
@@ -190,7 +234,7 @@ static void _Task_CommandDispatch(void)
         {
             uint8_t speed_cmd = g_system_data.slaves[i].control.target_fan_speed;
             
-            uprintf("DISPATCH: Slave %d fan speed changed! Target: %d%%, Last Sent: %d%%\r\n", 
+            uprintf("DISPATCH: Slave %d fan speed changed! Target: %3d%%, Last Sent: %3d%%\r\n", 
                     slave_id, speed_cmd, g_system_data.slaves[i].control.last_sent_fan_speed);
             
             // 步骤1：调用你的 DL20 协议函数进行打包
@@ -203,7 +247,7 @@ static void _Task_CommandDispatch(void)
                 // 常见函数名可能为 Uart_SendBuffer, Usart_Send_Buffer, bsp_uart_send 等
                 BSP_UART_SendBuffer(tx_buffer, frame_len); // <<-- 请确认此处的串口号和函数名
                 
-                uprintf("DISPATCH: Sent fan command to Slave %d via UART.\r\n", slave_id);
+//                uprintf("DISPATCH: Sent fan command to Slave %d via UART.\r\n", slave_id);
                 
                 // 步骤3：发送成功后，立即更新“上次发送”的记录，防止重复发送
                 g_system_data.slaves[i].control.last_sent_fan_speed = speed_cmd;
@@ -255,6 +299,8 @@ void Scheduler_Init(void)
     g_task_flags = (Task_Flags_t){0};
 //	 // 初始化“数据中心”
 //    memset(&g_app_data, 0, sizeof(AppData_t));
+	 HMI_SendCommandF("rest");
+	 HMI_SendCommandF("rest");
 }
 
 /**
@@ -267,14 +313,15 @@ void Scheduler_Tick(void)
 		// --- 设置实时性任务标志 ---
 		// 这些任务我们希望每次主循环都检查, 以获得最快响应
 		//    g_task_flags.run_task_process_voice = true;//接收语音控制
-		g_task_flags.run_task_process_cloud_down = true;//接收网络控制
+		g_task_flags.run_task_process_cloud_down = true;//接收OneNet指令并回应
 		g_task_flags.run_task_process_hmi_down = true;//接收显示屏控制 
-		if (g_tick_counter % 1000 == 0){g_task_flags.run_task_led_toggle = true;} // LED闪烁每500ms
+		if (g_tick_counter % 500 == 0){g_task_flags.run_task_process_hmi_up = true;} // HMI上行数据的任务标志每500ms
+		if (g_tick_counter % 1000 == 0){g_task_flags.run_task_led_toggle = true;} // LED闪烁每1000ms
 		if (g_tick_counter % 5000 == 100){g_task_flags.run_task_intelligent_control = true;}//智能管理
 		if (g_tick_counter % 5000 == 0){g_task_flags.run_task_read_local_sensors = true;}//主机数据采集(5秒) 
 		if (g_tick_counter % 1000 == 10){g_task_flags.run_task_command_dispatch = true;}//发送管理指令 
 		if (g_tick_counter % 5000 == 0){g_task_flags.run_task_update_hmi = true;}//显示屏更新 
-		if (g_tick_counter % 5100 == 0){g_task_flags.run_task_cloud_upload = true;}//网络数据更新
+		if (g_tick_counter % 3000 == 0){g_task_flags.run_task_cloud_upload = true;}//网络数据更新
 }
 
 /**
@@ -291,4 +338,5 @@ void Scheduler_Run(void)
 		if (g_task_flags.run_task_led_toggle)           { _Task_LedToggle();              g_task_flags.run_task_led_toggle = false;           }
 		if (g_task_flags.run_task_intelligent_control)  { _Task_IntelligentControl();     g_task_flags.run_task_intelligent_control = false;  }
 		if (g_task_flags.run_task_command_dispatch)     { _Task_CommandDispatch();        g_task_flags.run_task_command_dispatch = false;     }
+		if (g_task_flags.run_task_process_hmi_up)       { _Task_ProcessLogic();           g_task_flags.run_task_process_hmi_up = false;     }
 }

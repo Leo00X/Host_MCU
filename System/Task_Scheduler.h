@@ -16,6 +16,7 @@ typedef struct {
     bool run_task_process_voice;        // [实时] 处理语音模块指令的任务标志
     bool run_task_process_cloud_down;   // [实时] 处理OneNet下行数据的任务标志
     bool run_task_process_hmi_down;   // [实时] 处理HMI下行数据的任务标志
+	 bool run_task_process_hmi_up;   // [实时] 处理HMI上行数据的任务标志
     
     // --- 调试/状态指示任务 ---
     bool run_task_led_toggle;           // [周期] LED闪烁, 作为系统心跳指示
