@@ -751,6 +751,7 @@ void OneNet_RevPro(unsigned char *cmd)
 
                             if (fan_speed_json != NULL)
                             {
+										  g_system_data.hmi_fan_requests[i].new_request_flag = true;
                                 g_system_data.slaves[i].control.target_fan_speed = fan_speed_json->valueint;
                                 uprintf("%s = %d\r\n", fan_speed_key, g_system_data.slaves[i].control.target_fan_speed);
                             }

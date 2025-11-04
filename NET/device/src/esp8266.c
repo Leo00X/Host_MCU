@@ -67,7 +67,7 @@ void ESP8266_Clear(void)
 //==========================================================
 //	函数名称：	ESP8266_WaitRecive
 //
-//	函数功能：	等待接收完成
+//	函数功能：	等待接收完成 (HT32 专家已修改)
 //
 //	入口参数：	无
 //
@@ -79,12 +79,18 @@ _Bool ESP8266_WaitRecive(void)
 {
 
 	if(esp8266_cnt == 0) 							//如果接收计数为0 则说明没有处于接收数据中，所以直接跳出，结束函数
+	{
+		esp8266_cntPre = 0; // 确保 pre 也为0
 		return REV_WAIT;
+	}
 		
 	if(esp8266_cnt == esp8266_cntPre)				//如果上一次的值和这次相同，则说明接收完毕
 	{
-		esp8266_cnt = 0;							//清0接收计数
-			
+        // --- HT32 专家修改 ---
+		// *** 移除了这里的 esp8266_cnt = 0; ***
+        // 清除计数器的操作必须由数据处理函数在临界区内完成
+        // 否则会导致数据还未被读取，缓冲区就被覆盖的竞态条件
+        
 		return REV_OK;								//返回接收完成标志
 	}
 		
@@ -97,19 +103,30 @@ _Bool ESP8266_WaitRecive(void)
 //==========================================================
 //	函数名称：	ESP8266_SendCmd
 //
-//	函数功能：	发送命令
+//	函数功能：	发送命令 (HT32 专家已修改)
 //
 //	入口参数：	cmd：命令
 //				res：需要检查的返回指令
 //
 //	返回参数：	0-成功	1-失败
 //
-//	说明：		
+//	说明：		已增加临界区保护，解决竞态条件
 //==========================================================
 _Bool ESP8266_SendCmd(char *cmd, char *res)
 {
 	
 	unsigned char timeOut = 200;
+
+    // --- HT32 专家新增：本地缓冲区，用于安全处理数据 ---
+    // 使用 static 避免堆栈溢出，在单线程环境中安全
+    static char local_rx_buffer[sizeof(esp8266_buf)];
+    u16 local_rx_len = 0;
+    
+    // --- HT32 专家修改：在发送命令前，先在临界区内清空缓冲区 ---
+    NVIC_DisableIRQ(USART0_IRQn);
+    ESP8266_Clear();
+    esp8266_cntPre = 0; // 确保 WaitRecive 的状态也被重置
+    NVIC_EnableIRQ(USART0_IRQn);
 
 	Usart_SendString(HT_USART0, (unsigned char *)cmd, strlen((const char *)cmd));
 	
@@ -117,19 +134,62 @@ _Bool ESP8266_SendCmd(char *cmd, char *res)
 	{
 		if(ESP8266_WaitRecive() == REV_OK)							//如果收到数据
 		{
-			if(strstr((const char *)esp8266_buf, res) != NULL)		//如果检索到关键词
+            local_rx_len = 0;
+            
+            //==============================================================
+            // 1. 进入临界区 (只关闭 USART0 中断)
+            //==============================================================
+            NVIC_DisableIRQ(USART0_IRQn); // *** HT32 专家方案 ***
+
+            //==============================================================
+            // 2. 快速拷贝数据并清空全局缓冲区
+            //==============================================================
+            local_rx_len = esp8266_cnt;
+            if (local_rx_len > 0)
+            {
+                // 确保拷贝长度不超过本地缓冲区大小
+                if (local_rx_len >= sizeof(local_rx_buffer))
+                {
+                    local_rx_len = sizeof(local_rx_buffer) - 1;
+                }
+                memcpy(local_rx_buffer, esp8266_buf, local_rx_len);
+            }
+            
+            // 在临界区内清空全局缓冲区和计数器
+            ESP8266_Clear();
+            esp8266_cntPre = 0; // 重置 WaitRecive 的前一个值
+            
+            //==============================================================
+            // 3. 退出临界区 (立刻重新打开 USART0 中断)
+            //==============================================================
+            NVIC_EnableIRQ(USART0_IRQn);
+            
+            //==============================================================
+            // 4. 在临界区之外，安全地处理本地副本
+            //==============================================================
+			if(local_rx_len > 0)
 			{
-				ESP8266_Clear();									//清空缓存
-				
-				return 0;
+                local_rx_buffer[local_rx_len] = '\0'; // 确保字符串结束
+
+				if(strstr((const char *)local_rx_buffer, res) != NULL)		//如果检索到关键词
+				{
+					// 缓冲区已在临界区内清空
+					return 0; // 成功
+				}
+                // 如果没检索到，会继续循环等待下一次 WaitRecive (如果超时未到)
 			}
 		}
 		
 		delay_ms(10);
 	}
 	
-	return 1;
+    // --- HT32 专家修改：超时后也要清空缓冲区，为下次做准备 ---
+    NVIC_DisableIRQ(USART0_IRQn);
+    ESP8266_Clear();
+    esp8266_cntPre = 0;
+    NVIC_EnableIRQ(USART0_IRQn);
 
+	return 1; // 失败
 }
 
 //==========================================================
@@ -142,14 +202,15 @@ _Bool ESP8266_SendCmd(char *cmd, char *res)
 //
 //	返回参数：	无
 //
-//	说明：		
+//	说明：		(此函数依赖 ESP8266_SendCmd, 已自动获得安全保护)
 //==========================================================
 void ESP8266_SendData(unsigned char *data, unsigned short len)
 {
 
 	char cmdBuf[32];
 	
-	ESP8266_Clear();								//清空接收缓存
+    // 注意：ESP8266_SendCmd 内部已经包含了清空缓冲区的逻辑
+    // 所以这里不需要再调用 ESP8266_Clear()
 	sprintf(cmdBuf, "AT+CIPSEND=%d\r\n", len);		//发送命令
 	if(!ESP8266_SendCmd(cmdBuf, ">"))				//收到‘>’时可以发送数据
 	{
@@ -161,44 +222,92 @@ void ESP8266_SendData(unsigned char *data, unsigned short len)
 //==========================================================
 //	函数名称：	ESP8266_GetIPD
 //
-//	函数功能：	获取平台返回的数据
+//	函数功能：	获取平台返回的数据 (HT32 专家已修改)
 //
 //	入口参数：	等待的时间(乘以10ms)
 //
-//	返回参数：	平台返回的原始数据
+//	返回参数：	平台返回的原始数据 (指针指向静态本地缓冲区)
 //
-//	说明：		不同网络设备返回的格式不同，需要去调试
-//				如ESP8266的返回格式为	"+IPD,x:yyy"	x代表数据长度，yyy是数据内容
+//	说明：		已增加临界区保护，解决竞态条件。
+//				返回的指针指向一个*静态*缓冲区，数据在下次调用时会被覆盖。
 //==========================================================
+
+// --- HT32 专家新增：一个静态本地缓冲区，用于安全地处理和返回数据 ---
+// 警告: 这使得该函数不可重入，但对于单线程轮询是标准做法
+static char local_ipd_buffer[sizeof(esp8266_buf)];
+
 unsigned char *ESP8266_GetIPD(unsigned short timeOut)
 {
 
 	char *ptrIPD = NULL;
+    u16 local_rx_len = 0;
+    
+    // --- HT32 专家修改：在函数开始时不清除本地缓冲区，
+    // 因为如果超时，调用者可能还想访问上次的数据（尽管这不好）
+    // 我们只在 *成功复制* 数据时才覆盖它。
 	
 	do
 	{
 		if(ESP8266_WaitRecive() == REV_OK)								//如果接收完成
 		{
-			ptrIPD = strstr((char *)esp8266_buf, "IPD,");				//搜索“IPD”头
-			if(ptrIPD == NULL)											//如果没找到，可能是IPD头的延迟，还是需要等待一会，但不会超过设定的时间
+            local_rx_len = 0;
+
+            //==============================================================
+            // 1. 进入临界区 (只关闭 USART0 中断)
+            //==============================================================
+            NVIC_DisableIRQ(USART0_IRQn); // *** HT32 专家方案 ***
+
+            //==============================================================
+            // 2. 快速拷贝数据并清空全局缓冲区
+            //==============================================================
+            local_rx_len = esp8266_cnt;
+            if (local_rx_len > 0)
+            {
+                // 确保拷贝长度不超过本地缓冲区大小
+                if (local_rx_len >= sizeof(local_ipd_buffer))
+                {
+                    local_rx_len = sizeof(local_ipd_buffer) - 1;
+                }
+                memcpy(local_ipd_buffer, esp8266_buf, local_rx_len);
+            }
+            
+            // 在临界区内清空全局缓冲区和计数器
+            ESP8266_Clear();
+            esp8266_cntPre = 0; // 重置 WaitRecive 的前一个值
+            
+            //==============================================================
+            // 3. 退出临界区 (立刻重新打开 USART0 中断)
+            //==============================================================
+            NVIC_EnableIRQ(USART0_IRQn);
+
+            //==============================================================
+            // 4. 在临界区之外，安全地处理本地副本
+            //==============================================================
+			if(local_rx_len > 0)
 			{
-//				UsartPrintf(USART_DEBUG, "\"IPD\" not found\r\n");
-				uprintf("\"IPD\" not found\r\n");
-			}
-			else
-			{
-				ptrIPD = strchr(ptrIPD, ':');							//找到':'
-				if(ptrIPD != NULL)
+                local_ipd_buffer[local_rx_len] = '\0'; // 确保字符串结束
+
+				ptrIPD = strstr((char *)local_ipd_buffer, "IPD,");				//搜索“IPD”头
+				if(ptrIPD == NULL)											//如果没找到
 				{
-					ptrIPD++;
-//				UsartPrintf(USART_DEBUG, "\"IPD\" ok\r\n");
-				uprintf("\"IPD\" ok\r\n");
-					return (unsigned char *)(ptrIPD);
+					uprintf("\"IPD\" not found\r\n");
+                    // 数据包不是IPD，但已被消耗，继续循环等待下一次(如果超时未到)
 				}
 				else
-					return NULL;
-				
+				{
+					ptrIPD = strchr(ptrIPD, ':');							//找到':'
+					if(ptrIPD != NULL)
+					{
+						ptrIPD++;
+						uprintf("\"IPD\" ok\r\n");
+                        // 成功！ptrIPD 指向 local_ipd_buffer 内部
+						return (unsigned char *)(ptrIPD);
+					}
+                    // 找到了 "IPD," 但没找到 ":"，格式错误，继续循环
+				}
 			}
+            // 如果 local_rx_len == 0 (不太可能，因为WaitRecive OK了)，
+            // 也会继续循环
 		}
 		
 		delay_ms(5);													//延时等待

@@ -86,13 +86,22 @@ static void _Task_ProcessLogic(void)
 		 HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
        g_system_data.hmi_mode_request.new_request_flag = false;
     }
+	 
 	 if(!(0x01 == g_system_data.hmi_mode_request.mode_request))
 	 {
 		HMI_SetNumber("p2_ctrl.fan_speed_id_1", "val", (int)g_system_data.slaves[0].control.target_fan_speed);
 		HMI_SetNumber("p2_ctrl.fan_speed_id_2", "val", (int)g_system_data.slaves[1].control.target_fan_speed);
 		HMI_SetNumber("p2_ctrl.fan_speed_id_3", "val", (int)g_system_data.slaves[2].control.target_fan_speed);
+	 }else if(g_system_data.hmi_fan_requests[0].new_request_flag == true || g_system_data.hmi_fan_requests[1].new_request_flag == true || g_system_data.hmi_fan_requests[2].new_request_flag == true )
+	 {	 
+		HMI_SetNumber("p2_ctrl.fan_speed_id_1", "val", (int)g_system_data.slaves[0].control.target_fan_speed);
+		HMI_SetNumber("p2_ctrl.fan_speed_id_1", "val", (int)g_system_data.slaves[0].control.target_fan_speed);
+		HMI_SetNumber("p2_ctrl.fan_speed_id_2", "val", (int)g_system_data.slaves[1].control.target_fan_speed);
+		HMI_SetNumber("p2_ctrl.fan_speed_id_3", "val", (int)g_system_data.slaves[2].control.target_fan_speed);
+		g_system_data.hmi_fan_requests[0].new_request_flag = false; 
+		g_system_data.hmi_fan_requests[1].new_request_flag = false; 
+		g_system_data.hmi_fan_requests[2].new_request_flag = false; 
 	 }
-
 }
 
 /**
