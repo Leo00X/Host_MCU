@@ -459,6 +459,16 @@
               <FileType>5</FileType>
               <FilePath>..\System\protocol_dl20.h</FilePath>
             </File>
+            <File>
+              <FileName>E72_ZigBee.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\System\E72_ZigBee.c</FilePath>
+            </File>
+            <File>
+              <FileName>E72_ZigBee.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\System\E72_ZigBee.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

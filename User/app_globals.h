@@ -25,6 +25,7 @@
 typedef struct {
     bool new_request_flag;      // 新请求标志位: true表示有新请求
     u8   mode_request;          // 请求的模式 (0x00:自动, 0x01:手动, 0x02:睡眠)
+	 bool new_EnvData_flag;		  // 环境参数更新标志位
 } HMI_ModeRequest_t;
 
 /**

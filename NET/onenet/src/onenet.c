@@ -490,14 +490,11 @@ uint16_t OneNet_FillBuf(char *buf)
     if (written < 0 || written >= remaining) return 0;
     p += written; remaining -= written;
 	 
-	 // 1. 检查模式切换请求
-    if (g_system_data.hmi_mode_request.new_request_flag == false)
-    {
-		 written = snprintf(p, remaining, json_int_template, "global_fan_mode", g_system_data.hmi_mode_request.mode_request);
-		 uprintf("global_fan_mode = %d\r\n", g_system_data.hmi_mode_request.mode_request);
-		 if (written < 0 || written >= remaining) return 0;
-		 p += written; remaining -= written;
-    }
+
+	 written = snprintf(p, remaining, json_int_template, "global_fan_mode", g_system_data.hmi_mode_request.mode_request);
+	 if (written < 0 || written >= remaining) return 0;
+	 p += written; remaining -= written;
+//  uprintf("global_fan_mode = %d\r\n", g_system_data.hmi_mode_request.mode_request);
 
     // 3. 循环添加所有在线从机的数据
     for (i = 0; i < MAX_SLAVES; i++)
@@ -600,8 +597,10 @@ void OneNet_SendData(void)
                 mqttPacket._data[mqttPacket._len++] = buf[i];
             
             ESP8266_SendData(mqttPacket._data, mqttPacket._len);
-            UsartPrintf(USART_DEBUG, "Send OK\r\n");
+//            UsartPrintf(USART_DEBUG, "Send OK\r\n");
+			  uprintf("OneNET Send OK\r\n");
 
+//			  
 //			  // (安全修复 V2): 不再使用 UsartPrintf 的 %s 打印长字符串，避免其内部缓冲区溢出
 //				UsartPrintf(USART_DEBUG, "\r\n--- OneNET JSON Payload ---\r\n");
 
@@ -613,6 +612,7 @@ void OneNet_SendData(void)
 //				}
 
 //				UsartPrintf(USART_DEBUG, "\r\n---------------------------------\r\n");
+			  
             MQTT_DeleteBuffer(&mqttPacket);
         }
         else

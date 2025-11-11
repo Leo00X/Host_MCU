@@ -22,7 +22,8 @@
 #define BSP_USART_RX_AFIO_PIN       (AFIO_PIN_5)
 #define BSP_USART_AFIO_MODE         (AFIO_MODE_6) // AFIO_MODE_6 for UART1 on PB4/PB5
 
-#define BSP_USART_BAUDRATE          (115200)
+#define BSP_USART_BAUDRATE          (230400)
+//#define BSP_USART_BAUDRATE          (115200)
 
 /* 类型定义：接收回调函数指针 -------------------------------------------------------------*/
 // 定义一个函数指针类型，用于注册一个当UART接收到数据时被调用的函数

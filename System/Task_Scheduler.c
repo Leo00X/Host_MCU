@@ -43,31 +43,35 @@ static void _Task_ReadLocalSensors(void)
  */
 static void _Task_UpdateHMI(void)
 {
-    // 更新主机数据显示
-    HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);		//
-    HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
-    HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
-    HMI_SetNumber("p0_home.n1", "val", (int)g_system_data.host.env_data.humidity);
-    HMI_SetNumber("p0_home.n2", "val", (int)g_system_data.host.env_data.smog_ppm);
-    // 更新从机1数据显示
-    HMI_SetNumber("p1_env.n4", "val", (int)g_system_data.slaves[0].env_data.temperature);
-    HMI_SetNumber("p1_env.n5", "val", (int)g_system_data.slaves[0].env_data.humidity);
-    HMI_SetNumber("p1_env.n6", "val", (int)g_system_data.slaves[0].env_data.smog_ppm);
-    HMI_SetNumber("p1_env.n7", "val", (int)g_system_data.slaves[0].env_data.co_ppm);
-    HMI_SetNumber("p1_env.n8", "val", (int)g_system_data.slaves[0].env_data.aqi_ppm);
-    // 更新从机2数据显示
-    HMI_SetNumber("p1_env.n9", "val",  (int)g_system_data.slaves[1].env_data.temperature);
-    HMI_SetNumber("p1_env.n10", "val", (int)g_system_data.slaves[1].env_data.humidity);
-    HMI_SetNumber("p1_env.n11", "val", (int)g_system_data.slaves[1].env_data.smog_ppm);
-    HMI_SetNumber("p1_env.n12", "val", (int)g_system_data.slaves[1].env_data.co_ppm);
-    HMI_SetNumber("p1_env.n13", "val", (int)g_system_data.slaves[1].env_data.aqi_ppm);
-    // 更新从机3数据显示
-    HMI_SetNumber("p1_env.n14", "val", (int)g_system_data.slaves[2].env_data.temperature);
-    HMI_SetNumber("p1_env.n15", "val", (int)g_system_data.slaves[2].env_data.humidity);
-    HMI_SetNumber("p1_env.n16", "val", (int)g_system_data.slaves[2].env_data.smog_ppm);
-    HMI_SetNumber("p1_env.n17", "val", (int)g_system_data.slaves[2].env_data.co_ppm);
-    HMI_SetNumber("p1_env.n18", "val", (int)g_system_data.slaves[2].env_data.aqi_ppm);
-
+	if(g_system_data.hmi_mode_request.new_EnvData_flag == true)
+	{
+	// 更新主机数据显示
+	HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);		//
+	HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
+	HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
+	HMI_SetNumber("p0_home.n1", "val", (int)g_system_data.host.env_data.humidity);
+	HMI_SetNumber("p0_home.n2", "val", (int)g_system_data.host.env_data.smog_ppm);
+	// 更新从机1数据显示
+	HMI_SetNumber("p1_env.n4", "val", (int)g_system_data.slaves[0].env_data.temperature);
+	HMI_SetNumber("p1_env.n5", "val", (int)g_system_data.slaves[0].env_data.humidity);
+	HMI_SetNumber("p1_env.n6", "val", (int)g_system_data.slaves[0].env_data.smog_ppm);
+	HMI_SetNumber("p1_env.n7", "val", (int)g_system_data.slaves[0].env_data.co_ppm);
+	HMI_SetNumber("p1_env.n8", "val", (int)g_system_data.slaves[0].env_data.aqi_ppm);
+	// 更新从机2数据显示
+	HMI_SetNumber("p1_env.n9", "val",  (int)g_system_data.slaves[1].env_data.temperature);
+	HMI_SetNumber("p1_env.n10", "val", (int)g_system_data.slaves[1].env_data.humidity);
+	HMI_SetNumber("p1_env.n11", "val", (int)g_system_data.slaves[1].env_data.smog_ppm);
+	HMI_SetNumber("p1_env.n12", "val", (int)g_system_data.slaves[1].env_data.co_ppm);
+	HMI_SetNumber("p1_env.n13", "val", (int)g_system_data.slaves[1].env_data.aqi_ppm);
+	// 更新从机3数据显示
+	HMI_SetNumber("p1_env.n14", "val", (int)g_system_data.slaves[2].env_data.temperature);
+	HMI_SetNumber("p1_env.n15", "val", (int)g_system_data.slaves[2].env_data.humidity);
+	HMI_SetNumber("p1_env.n16", "val", (int)g_system_data.slaves[2].env_data.smog_ppm);
+	HMI_SetNumber("p1_env.n17", "val", (int)g_system_data.slaves[2].env_data.co_ppm);
+	HMI_SetNumber("p1_env.n18", "val", (int)g_system_data.slaves[2].env_data.aqi_ppm);
+	g_system_data.hmi_mode_request.new_EnvData_flag = false;
+	}
+	
 
 }
 
@@ -80,27 +84,39 @@ static void _Task_ProcessLogic(void)
     // 1. 检查模式切换请求
     if (g_system_data.hmi_mode_request.new_request_flag == true)
     {
+		 //更新OneNET
+		 g_task_flags.run_task_cloud_upload = true;
+		 
        uprintf("Processing Mode Change Request: %d\r\n", g_system_data.hmi_mode_request.mode_request);
 		 HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
 		 HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
 		 HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
+		 
        g_system_data.hmi_mode_request.new_request_flag = false;
     }
 	 
 	 if(!(0x01 == g_system_data.hmi_mode_request.mode_request))
 	 {
-		HMI_SetNumber("p2_ctrl.fan_speed_id_1", "val", (int)g_system_data.slaves[0].control.target_fan_speed);
-		HMI_SetNumber("p2_ctrl.fan_speed_id_2", "val", (int)g_system_data.slaves[1].control.target_fan_speed);
-		HMI_SetNumber("p2_ctrl.fan_speed_id_3", "val", (int)g_system_data.slaves[2].control.target_fan_speed);
-	 }else if(g_system_data.hmi_fan_requests[0].new_request_flag == true || g_system_data.hmi_fan_requests[1].new_request_flag == true || g_system_data.hmi_fan_requests[2].new_request_flag == true )
+	 HMI_SetNumber("p2_ctrl.fan_speed_id_1", "val", (int)g_system_data.slaves[0].control.target_fan_speed);
+	 HMI_SetNumber("p2_ctrl.fan_speed_id_1", "val", (int)g_system_data.slaves[0].control.target_fan_speed);
+	 HMI_SetNumber("p2_ctrl.fan_speed_id_2", "val", (int)g_system_data.slaves[1].control.target_fan_speed);
+	 HMI_SetNumber("p2_ctrl.fan_speed_id_3", "val", (int)g_system_data.slaves[2].control.target_fan_speed);
+	 }
+	 if(g_system_data.hmi_fan_requests[0].new_request_flag == true || g_system_data.hmi_fan_requests[1].new_request_flag == true || g_system_data.hmi_fan_requests[2].new_request_flag == true )
 	 {	 
+		//更新OneNET
+		g_task_flags.run_task_cloud_upload = true;
+		 
 		HMI_SetNumber("p2_ctrl.fan_speed_id_1", "val", (int)g_system_data.slaves[0].control.target_fan_speed);
 		HMI_SetNumber("p2_ctrl.fan_speed_id_1", "val", (int)g_system_data.slaves[0].control.target_fan_speed);
 		HMI_SetNumber("p2_ctrl.fan_speed_id_2", "val", (int)g_system_data.slaves[1].control.target_fan_speed);
 		HMI_SetNumber("p2_ctrl.fan_speed_id_3", "val", (int)g_system_data.slaves[2].control.target_fan_speed);
+		 
+		 
 		g_system_data.hmi_fan_requests[0].new_request_flag = false; 
 		g_system_data.hmi_fan_requests[1].new_request_flag = false; 
 		g_system_data.hmi_fan_requests[2].new_request_flag = false; 
+		
 	 }
 }
 
@@ -123,7 +139,7 @@ static void _Task_HMI_Process(void)
                     // 更新 g_system_data 中的全局模式请求
 						  g_system_data.hmi_mode_request.mode_request ++;
 						  if(g_system_data.hmi_mode_request.mode_request > 2){g_system_data.hmi_mode_request.mode_request = 0 ;}
-                    g_system_data.hmi_mode_request.new_request_flag = true; // 设置请求标志
+                    g_system_data.hmi_mode_request.new_request_flag = true; // 设置请求标志		
 						  HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
 						  HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
 						  HMI_SendCommandF("p0_home.v_fan_mode.val=%d",g_system_data.hmi_mode_request.mode_request);
@@ -206,7 +222,6 @@ static void _Task_ProcessCloudDownlink(void)
  */
 static void _Task_IntelligentControl(void)
 {
-//    uprintf("SCHEDULER: Calling IAQ Algorithm...\r\n");
 	if(!(0x01 == g_system_data.hmi_mode_request.mode_request))
 	{
 		IAQ_RunDecisionAlgorithm();    // 只需调用算法模块的接口函数
@@ -260,31 +275,34 @@ static void _Task_CommandDispatch(void)
                 
                 // 步骤3：发送成功后，立即更新“上次发送”的记录，防止重复发送
                 g_system_data.slaves[i].control.last_sent_fan_speed = speed_cmd;
+					 delay_ms(70);
+					
             }
         }
         
-        // ----------- 检查2: 报警器指令是否需要更新 (同理) -----------
-        if (g_system_data.slaves[i].control.target_alarm_status != g_system_data.slaves[i].control.last_sent_alarm_status)
-        {
-            bool alarm_cmd = g_system_data.slaves[i].control.target_alarm_status;
 
-            uprintf("DISPATCH: Slave %d alarm status changed! Target: %d\r\n", slave_id, alarm_cmd);
-            
-            frame_len = DL20_PackAlarmCommand(slave_id, alarm_cmd, tx_buffer);
-            if (frame_len > 0)
-            {
-                // 同样，调用你的实际串口发送函数
-                BSP_UART_SendBuffer(tx_buffer, frame_len); // <<-- 请确认此处的串口号和函数名
-
-                uprintf("DISPATCH: Sent alarm command to Slave %d via UART.\r\n", slave_id);
-
-                // 更新记录
-                g_system_data.slaves[i].control.last_sent_alarm_status = alarm_cmd;
-            }
-        }
     }
 }
 
+        // ----------- 检查2: 报警器指令是否需要更新 (同理) -----------
+//        if (g_system_data.slaves[i].control.target_alarm_status != g_system_data.slaves[i].control.last_sent_alarm_status)
+//        {
+//            bool alarm_cmd = g_system_data.slaves[i].control.target_alarm_status;
+
+//            uprintf("DISPATCH: Slave %d alarm status changed! Target: %d\r\n", slave_id, alarm_cmd);
+//            
+//            frame_len = DL20_PackAlarmCommand(slave_id, alarm_cmd, tx_buffer);
+//            if (frame_len > 0)
+//            {
+//                // 同样，调用你的实际串口发送函数
+//                BSP_UART_SendBuffer(tx_buffer, frame_len); // <<-- 请确认此处的串口号和函数名
+
+//                uprintf("DISPATCH: Sent alarm command to Slave %d via UART.\r\n", slave_id);
+
+//                // 更新记录
+//                g_system_data.slaves[i].control.last_sent_alarm_status = alarm_cmd;
+//            }
+//        }
 
 /**
  * @brief  [任务] LED闪烁 (系统心跳)
@@ -324,13 +342,13 @@ void Scheduler_Tick(void)
 		//    g_task_flags.run_task_process_voice = true;//接收语音控制
 		g_task_flags.run_task_process_cloud_down = true;//接收OneNet指令并回应
 		g_task_flags.run_task_process_hmi_down = true;//接收显示屏控制 
-		if (g_tick_counter % 500 == 0){g_task_flags.run_task_process_hmi_up = true;} // HMI上行数据的任务标志每500ms
+		if (g_tick_counter % 800 == 0){g_task_flags.run_task_process_hmi_up = true;} // HMI上行数据更新的任务标志每500ms
 		if (g_tick_counter % 1000 == 0){g_task_flags.run_task_led_toggle = true;} // LED闪烁每1000ms
 		if (g_tick_counter % 5000 == 100){g_task_flags.run_task_intelligent_control = true;}//智能管理
 		if (g_tick_counter % 5000 == 0){g_task_flags.run_task_read_local_sensors = true;}//主机数据采集(5秒) 
 		if (g_tick_counter % 1000 == 10){g_task_flags.run_task_command_dispatch = true;}//发送管理指令 
-		if (g_tick_counter % 5000 == 0){g_task_flags.run_task_update_hmi = true;}//显示屏更新 
-		if (g_tick_counter % 3000 == 0){g_task_flags.run_task_cloud_upload = true;}//网络数据更新
+		if (g_tick_counter % 5000 == 0){g_task_flags.run_task_update_hmi = true; g_system_data.hmi_mode_request.new_EnvData_flag = true;}//显示屏更新 
+		if (g_tick_counter % 5000 == 100){g_task_flags.run_task_cloud_upload = true;}//网络数据更新
 }
 
 /**

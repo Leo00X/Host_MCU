@@ -34,8 +34,8 @@
 #include <stdio.h>
 
 
-#define ESP8266_WIFI_INFO		"AT+CWJAP=\"IoT-605\",\"A605A605\"\r\n"
-//#define ESP8266_WIFI_INFO		"AT+CWJAP=\"LiangXing\",\"8265398.\"\r\n"
+//#define ESP8266_WIFI_INFO		"AT+CWJAP=\"IoT-605\",\"A605A605\"\r\n"
+#define ESP8266_WIFI_INFO		"AT+CWJAP=\"LiangXing\",\"8265398.\"\r\n"
 //#define ESP8266_WIFI_INFO		"AT+CWJAP=\"A301\",\"301301301\"\r\n"
 //#define ESP8266_WIFI_INFO		"AT+CWJAP=\"Xiaomi 14 Ultra\",\"704554363\"\r\n"
 //#define ESP8266_WIFI_INFO		"AT+CWJAP=\"sheng\",\"15724174685\"\r\n"
@@ -290,7 +290,7 @@ unsigned char *ESP8266_GetIPD(unsigned short timeOut)
 				ptrIPD = strstr((char *)local_ipd_buffer, "IPD,");				//搜索“IPD”头
 				if(ptrIPD == NULL)											//如果没找到
 				{
-					uprintf("\"IPD\" not found\r\n");
+//					uprintf("\"IPD\" not found\r\n");
                     // 数据包不是IPD，但已被消耗，继续循环等待下一次(如果超时未到)
 				}
 				else
@@ -299,7 +299,7 @@ unsigned char *ESP8266_GetIPD(unsigned short timeOut)
 					if(ptrIPD != NULL)
 					{
 						ptrIPD++;
-						uprintf("\"IPD\" ok\r\n");
+//						uprintf("\"IPD\" ok\r\n");
                         // 成功！ptrIPD 指向 local_ipd_buffer 内部
 						return (unsigned char *)(ptrIPD);
 					}

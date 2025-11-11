@@ -160,6 +160,7 @@ void IAQ_RunDecisionAlgorithm(void)
         }
 
         // 写入决策结果
+		  g_system_data.hmi_fan_requests[i].new_request_flag = true;
         g_system_data.slaves[i].control.target_fan_speed = final_speed;
     }
 }
