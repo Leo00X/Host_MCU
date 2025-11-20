@@ -46,33 +46,41 @@ static void _Task_UpdateHMI(void)
 	if(g_system_data.hmi_mode_request.new_EnvData_flag == true)
 	{
 	// 更新主机数据显示
-	HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);		//
+	// [Hardware Workaround] 连续发送三次以防止丢包/处理失败
 	HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
 	HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
+	HMI_SetNumber("p0_home.n0", "val", (int)g_system_data.host.env_data.temperature);
+	
 	HMI_SetNumber("p0_home.n1", "val", (int)g_system_data.host.env_data.humidity);
 	HMI_SetNumber("p0_home.n2", "val", (int)g_system_data.host.env_data.smog_ppm);
-	// 更新从机1数据显示
-	HMI_SetNumber("p1_env.n4", "val", (int)g_system_data.slaves[0].env_data.temperature);
-	HMI_SetNumber("p1_env.n5", "val", (int)g_system_data.slaves[0].env_data.humidity);
-	HMI_SetNumber("p1_env.n6", "val", (int)g_system_data.slaves[0].env_data.smog_ppm);
-	HMI_SetNumber("p1_env.n7", "val", (int)g_system_data.slaves[0].env_data.co_ppm);
-	HMI_SetNumber("p1_env.n8", "val", (int)g_system_data.slaves[0].env_data.aqi_ppm);
-	// 更新从机2数据显示
-	HMI_SetNumber("p1_env.n9", "val",  (int)g_system_data.slaves[1].env_data.temperature);
-	HMI_SetNumber("p1_env.n10", "val", (int)g_system_data.slaves[1].env_data.humidity);
-	HMI_SetNumber("p1_env.n11", "val", (int)g_system_data.slaves[1].env_data.smog_ppm);
-	HMI_SetNumber("p1_env.n12", "val", (int)g_system_data.slaves[1].env_data.co_ppm);
-	HMI_SetNumber("p1_env.n13", "val", (int)g_system_data.slaves[1].env_data.aqi_ppm);
-	// 更新从机3数据显示
-	HMI_SetNumber("p1_env.n14", "val", (int)g_system_data.slaves[2].env_data.temperature);
-	HMI_SetNumber("p1_env.n15", "val", (int)g_system_data.slaves[2].env_data.humidity);
-	HMI_SetNumber("p1_env.n16", "val", (int)g_system_data.slaves[2].env_data.smog_ppm);
-	HMI_SetNumber("p1_env.n17", "val", (int)g_system_data.slaves[2].env_data.co_ppm);
-	HMI_SetNumber("p1_env.n18", "val", (int)g_system_data.slaves[2].env_data.aqi_ppm);
+
+	// 更新从机数据显示 (使用循环优化)
+	// 假设从机控件ID规律为: Slave0(n4-n8), Slave1(n9-n13), Slave2(n14-n18)
+	char comp_name[16]; 
+	int base_id = 4;    
+
+	for(int i = 0; i < MAX_SLAVES; i++)
+	{
+		 int current_base = base_id + (i * 5);
+
+		 sprintf(comp_name, "p1_env.n%d", current_base + 0);
+		 HMI_SetNumber(comp_name, "val", (int)g_system_data.slaves[i].env_data.temperature);
+
+		 sprintf(comp_name, "p1_env.n%d", current_base + 1);
+		 HMI_SetNumber(comp_name, "val", (int)g_system_data.slaves[i].env_data.humidity);
+
+		 sprintf(comp_name, "p1_env.n%d", current_base + 2);
+		 HMI_SetNumber(comp_name, "val", (int)g_system_data.slaves[i].env_data.smog_ppm);
+
+		 sprintf(comp_name, "p1_env.n%d", current_base + 3);
+		 HMI_SetNumber(comp_name, "val", (int)g_system_data.slaves[i].env_data.co_ppm);
+
+		 sprintf(comp_name, "p1_env.n%d", current_base + 4);
+		 HMI_SetNumber(comp_name, "val", (int)g_system_data.slaves[i].env_data.aqi_ppm);
+	}
+
 	g_system_data.hmi_mode_request.new_EnvData_flag = false;
 	}
-	
-
 }
 
 /**
@@ -231,78 +239,70 @@ static void _Task_IntelligentControl(void)
 
 
 /**
- * @brief  [任务] 指令派发中心 (最终版)
+ * @brief  [任务] 指令派发中心 (V3.1 - E72/HEX 架构版)
  * @brief  遍历所有从机，检查其“目标状态”与“上次发送状态”是否一致.
- * @brief  如果不一致，则调用 DL20 协议函数打包，并通过串口发送新的控制指令.
+ * @brief  如果不一致，则调用 V3.1 的 Protocol_SendFanCommand API 发送指令.
  */
 static void _Task_CommandDispatch(void)
 {
-    uint8_t tx_buffer[32]; // 用于打包的临时发送缓冲区
-    uint16_t frame_len;
-    
-//    uprintf("SCHEDULER: Running Command Dispatch...\r\n"); // 调试时可以取消此行注释
-
     // 遍历所有从机节点
     for (int i = 0; i < MAX_SLAVES; i++)
     {
-        // 如果从机不在线，则跳过，不发送任何指令
-//        if (g_system_data.slaves[i].info.is_online == false)
-//        {
-//            continue;
-//        }
+        // 如果从机不在线，则跳过 (这仍然是一个好习惯)
+        if (g_system_data.slaves[i].info.is_online == false)
+        {
+            continue;
+        }
 
-        uint8_t slave_id = i + 1;
+        uint8_t slave_id = i + 1; // 1-based ID for logging
 
         // ----------- 检查1: 风扇速度指令是否需要更新 -----------
         if (g_system_data.slaves[i].control.target_fan_speed != g_system_data.slaves[i].control.last_sent_fan_speed)
         {
             uint8_t speed_cmd = g_system_data.slaves[i].control.target_fan_speed;
             
-            uprintf("DISPATCH: Slave %d fan speed changed! Target: %3d%%, Last Sent: %3d%%\r\n", 
-                    slave_id, speed_cmd, g_system_data.slaves[i].control.last_sent_fan_speed);
+            // (V3.1 关键) 从“数据大脑”中获取该从机的Zigbee短地址
+            u16 dest_addr = g_system_data.slaves[i].info.zigbee_short_addr;
             
-            // 步骤1：调用你的 DL20 协议函数进行打包
-            frame_len = DL20_PackFanCommand(slave_id, speed_cmd, tx_buffer);
-            
-            if (frame_len > 0)
+            // 检查短地址是否有效 (例如 0x0000 是协调器地址，0xFFFE 是无效)
+            if (dest_addr == 0x0000 || dest_addr == 0xFFFE)
             {
-                // 步骤2：【关键修改】调用你的实际串口发送函数，将打包好的数据发送给Zigbee模块
-                // 请根据你的 uart 驱动，修改下面的函数名和第一个参数 (串口号)
-                // 常见函数名可能为 Uart_SendBuffer, Usart_Send_Buffer, bsp_uart_send 等
-                BSP_UART_SendBuffer(tx_buffer, frame_len); // <<-- 请确认此处的串口号和函数名
-                
-//                uprintf("DISPATCH: Sent fan command to Slave %d via UART.\r\n", slave_id);
-                
-                // 步骤3：发送成功后，立即更新“上次发送”的记录，防止重复发送
-                g_system_data.slaves[i].control.last_sent_fan_speed = speed_cmd;
-					 delay_ms(70);
-					
+                uprintf("DISPATCH ERR: Slave %d has invalid zigbee_short_addr 0x%04X\r\n", slave_id, dest_addr);
+                continue; // 跳过
             }
+
+            uprintf("DISPATCH: Slave %d (Addr: 0x%04X) fan speed changed! Target: %d%%\r\n", 
+                    slave_id, dest_addr, speed_cmd);
+            
+            // 步骤1：【关键修改】调用V3.1的应用层API
+            // 我们不再需要 tx_buffer 或 frame_len
+            // Protocol_SendFanCommand 会为我们处理所有 DL20 打包 和 E72 打包
+            Protocol_SendFanCommand(dest_addr, speed_cmd);
+            
+            // 步骤2：发送成功后，立即更新“上次发送”的记录
+            g_system_data.slaves[i].control.last_sent_fan_speed = speed_cmd;
+            
+            // 步骤3：(重要) 保留你的70ms延时
+            // Zigbee (E72) 模块处理和发送HEX指令需要时间
+            // 连续快速地向UART发送多帧数据会导致模块缓冲区溢出或处理失败
+            delay_ms(70); 
         }
         
 
     }
 }
 
-        // ----------- 检查2: 报警器指令是否需要更新 (同理) -----------
-//        if (g_system_data.slaves[i].control.target_alarm_status != g_system_data.slaves[i].control.last_sent_alarm_status)
-//        {
-//            bool alarm_cmd = g_system_data.slaves[i].control.target_alarm_status;
-
-//            uprintf("DISPATCH: Slave %d alarm status changed! Target: %d\r\n", slave_id, alarm_cmd);
-//            
-//            frame_len = DL20_PackAlarmCommand(slave_id, alarm_cmd, tx_buffer);
-//            if (frame_len > 0)
-//            {
-//                // 同样，调用你的实际串口发送函数
-//                BSP_UART_SendBuffer(tx_buffer, frame_len); // <<-- 请确认此处的串口号和函数名
-
-//                uprintf("DISPATCH: Sent alarm command to Slave %d via UART.\r\n", slave_id);
-
-//                // 更新记录
-//                g_system_data.slaves[i].control.last_sent_alarm_status = alarm_cmd;
-//            }
-//        }
+        // ----------- 检查2: 报警器指令 (可以按同样逻辑添加) -----------
+        // if (g_system_data.slaves[i].control.target_alarm_state != g_system_data.slaves[i].control.last_sent_alarm_state)
+        // {
+        //     u16 dest_addr = g_system_data.slaves[i].info.zigbee_short_addr;
+        //     u8 alarm_cmd = g_system_data.slaves[i].control.target_alarm_state;
+        //
+        //     Protocol_SendAlarmCommand(dest_addr, alarm_cmd);
+        //
+        //     g_system_data.slaves[i].control.last_sent_alarm_state = alarm_cmd;
+        //     delay_ms(70);
+        // }
 
 /**
  * @brief  [任务] LED闪烁 (系统心跳)

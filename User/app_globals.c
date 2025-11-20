@@ -52,6 +52,9 @@ void APP_GLOBALS_Init(void)
 	
 	
 	 g_system_data.hmi_mode_request.mode_request = 0x00;
+	 g_system_data.slaves[0].info.zigbee_short_addr = 0x1234;
+	 g_system_data.slaves[1].info.zigbee_short_addr = 0x5678;
+	 g_system_data.slaves[2].info.zigbee_short_addr = 0xABCD;
 
     //----------------------------------------------------------------
     // 2. 初始化所有从机节点数据

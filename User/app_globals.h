@@ -105,6 +105,8 @@ typedef struct {
 typedef struct {
     bool is_online;         // 在线状态: true-在线, false-离线
     u32  last_update_tick;  // 最后一次收到数据的时间戳 (可用于超时判断)
+	
+    u16  zigbee_short_addr;	// 必须在这里存储每个从机在Zigbee网络中的短地址
 } SlaveInfo_t;
 
 /**

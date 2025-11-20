@@ -95,8 +95,9 @@ void Hardware_Init(void)
 	USART1_Configuration();						//USART1,串口屏
 	USART0_Configuration();						//USART0，驱动ESP8266用
 	UART0_Configuration();						//UART0，ASRPRO语音模块用
-	BSP_UART_Init();								//UART1,DL-20的zigbee联系从机
-	DL20_Init();
+//	BSP_UART_Init();								//UART1,DL-20的zigbee联系从机
+	E72_Init();										// 初始化 E72 驱动 (它会自动初始化 bsp_uart.c)
+	Protocol_Init();
 	MQ2_Init();
 	MQ5_Init();
    HMI_Init();	
@@ -108,8 +109,6 @@ void Hardware_Init(void)
  int main(void)
  {	
 
-
-	
 	unsigned char *dataPtr = NULL;
 
 	Hardware_Init();//硬件初始化
